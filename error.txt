@@ -1,4 +1,7 @@
-Error (Line 2): Invalid token .
-Error (Line 2): Invalid token 0e.
-Error (Line 4): Invalid token !
-Error (Line 9): Invalid token .
+Error (Line 3, Column 1): Invalid token _
+Error (Line 3, Column 3): Invalid token _
+Error (Line 4, Column 5): Invalid token 3.0eZ
+Error (Line 4, Column 18): Invalid token !
+Error (Line 5, Column 5): Invalid token .
+Error (Line 7, Column 8): Invalid token $
+Error (Line 10, Column 10): Invalid token .

@@ -1,10 +1,10 @@
 double s;
-def dou.ble f(double x, double y)
+def double f(double x, double y)
 	double a;
 	a=x+y*y;
 	return a
 fed;
-s=f(2.4,1)+f(1.3,-2.4)+f(1.0ek-10double s;
+s=f(2.4,1)+f(1.3,-2.4)+f(1.0e-10double s;
 def double f(double x, double y)
 	double a;
 	a=x+y*y;

@@ -1,15 +1,3 @@
-// Once a final acceptance state is reached where the next token does not match anything, then
-// Transisiton to TERMINATE state, program checks if TERMINATE first thing, if so emits last state and
-// token - most recent char, resets state to start and token to the most recent char
-// Can prob just get rid of terminate and go straight to start
-
-// can do binary seach on comparing keywords to identifier
-
-// For keywords I think we can just check direcly. So when trasisiton table terminates with identifier just check if it == a keyword and if so emit keyword token
-// just have to write my own !strcmp function to compare the strings but otherwise allowed I think
-
-// ERROR STATE needs to do one thing if the current char is valid on its own and another if its not
-
 #include <stdio.h>
 
 #define BUFFER_SIZE 1024
@@ -26,76 +14,110 @@
 #define DOUBLE_3 10
 #define DOUBLE_A2 11
 #define ERROR 12
-#define TERMINATE 13
 
+// Initialize file pointers, buffers, and buffer variables
+FILE *file, *outputFile, *errorFile;
 char buffer1[BUFFER_SIZE + 1], buffer2[BUFFER_SIZE + 1];
 char *currentBuffer = buffer1;
 int bufferIndex = 0, bytesRead = 0;
-int lineNumber = 1;
-FILE *file, *outputFile, *errorFile;
 
-int transition_table[14][12] = {
-    // space  Punctuation    +|-         %|*|/      <           >             =      letters - e      0-9      e         .       other
-    {START, PUNCTUATION, OPERATOR_3, OPERATOR_3, OPERATOR_1, OPERATOR_2, OPERATOR_2, IDENTIFIER, INTEGER, IDENTIFIER, ERROR, ERROR},         // Start
-    {TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE},    // Punctuation
-    {TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, OPERATOR_3, OPERATOR_3, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE},  // OPERATOR_1
-    {TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, OPERATOR_3, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE},   // OPERATOR_2
-    {TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE},    // OPERATOR_3
-    {TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, IDENTIFIER, IDENTIFIER, IDENTIFIER, TERMINATE, TERMINATE}, // IDENTIFIER
-    {TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, INTEGER, DOUBLE_2, DOUBLE_1, TERMINATE},        // INTEGER
-    {ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, DOUBLE_A1, ERROR, ERROR, ERROR},                                                // DOUBLE_1
-    {ERROR, ERROR, DOUBLE_3, ERROR, ERROR, ERROR, ERROR, ERROR, DOUBLE_A2, ERROR, ERROR, ERROR},                                             // DOUBLE_2
-    {TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, DOUBLE_A1, DOUBLE_2, TERMINATE, TERMINATE},     // DOUBLE_A1
-    {ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, DOUBLE_A2, ERROR, ERROR, ERROR},                                                // Double_3
-    {TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, DOUBLE_A2, TERMINATE, TERMINATE, TERMINATE},               // DOUBLE_A2
-    {ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR},                                                    // ERROR
-    {TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE, TERMINATE},    // TERMINATE
+int lineNumber = 1;
+int columnNumber = 0;
+
+int inputTypeTable[256]; // Initialize lookup table for input types
+
+// Initialize transition table from DFA
+int transition_table[13][12] = {
+    // space Punctuation    +|-         %|*|/       <           >           =      letters - e    0-9        e         .     other
+    {START, PUNCTUATION, OPERATOR_3, OPERATOR_3, OPERATOR_1, OPERATOR_2, OPERATOR_2, IDENTIFIER, INTEGER, IDENTIFIER, ERROR, ERROR}, // Start
+    {START, START, START, START, START, START, START, START, START, START, START, START},                                            // Punctuation
+    {START, START, START, START, START, OPERATOR_3, OPERATOR_3, START, START, START, START, START},                                  // OPERATOR_1
+    {START, START, START, START, START, START, OPERATOR_3, START, START, START, START, START},                                       // OPERATOR_2
+    {START, START, START, START, START, START, START, START, START, START, START, START},                                            // OPERATOR_3
+    {START, START, START, START, START, START, START, IDENTIFIER, IDENTIFIER, IDENTIFIER, START, START},                             // IDENTIFIER
+    {START, START, START, START, START, START, START, START, INTEGER, DOUBLE_2, DOUBLE_1, START},                                    // INTEGER
+    {ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, DOUBLE_A1, ERROR, ERROR, ERROR},                                        // DOUBLE_1
+    {ERROR, ERROR, DOUBLE_3, ERROR, ERROR, ERROR, ERROR, ERROR, DOUBLE_A2, ERROR, ERROR, ERROR},                                     // DOUBLE_2
+    {START, START, START, START, START, START, START, START, DOUBLE_A1, DOUBLE_2, START, START},                                     // DOUBLE_A1
+    {ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, DOUBLE_A2, ERROR, ERROR, ERROR},                                        // Double_3
+    {START, START, START, START, START, START, START, START, DOUBLE_A2, START, START, START},                                        // DOUBLE_A2
+    {ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR, ERROR},                                            // ERROR
 };
 
-char *state_names[14] = {
-    "REJECT", "PUNCTUATION", "OPERATOR", "OPERATOR", "OPERATOR", "IDENTIFIER", "INTEGER", "REJECT", "REJECT", "DOUBLE", "REJECT", "DOUBLE", "REJECT", "REJECT"};
+// Initialize state names for writing output
+char *state_names[13] = {
+    "START", "PUNCTUATION", "OPERATOR", "OPERATOR", "OPERATOR", "IDENTIFIER", "INTEGER", "D_REJECT", "D_REJECT", "DOUBLE", "D_REJECT", "DOUBLE", "ERROR"};
 
+// Initialize sorted keywords for binary search
 const char *keywords[] = {
     "and", "def", "do", "double", "else", "fed", "fi",
     "if", "int", "not", "od", "or", "print", "return", "then", "while"};
 
-int isLetter(char c)
+/*
+    Initializes the input type lookup table
+    This table is used to find the type of input character
+    based on its ASCII value in O(1) time
+*/
+void initializeInputTypeTable()
 {
-    return ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'));
+    // Default to other (Invalid) type
+    for (int i = 0; i < 256; i++)
+        inputTypeTable[i] = 11;
+
+    // Whitespace characters
+    inputTypeTable[' '] = 0;
+    inputTypeTable['\t'] = 0;
+    inputTypeTable['\n'] = 0;
+    inputTypeTable['\r'] = 0;
+
+    // Punctuation
+    inputTypeTable['('] = 1;
+    inputTypeTable[')'] = 1;
+    inputTypeTable['['] = 1;
+    inputTypeTable[']'] = 1;
+    inputTypeTable[','] = 1;
+    inputTypeTable[';'] = 1;
+
+    // Operators
+    inputTypeTable['+'] = 2;
+    inputTypeTable['-'] = 2;
+    inputTypeTable['*'] = 3;
+    inputTypeTable['/'] = 3;
+    inputTypeTable['%'] = 3;
+    inputTypeTable['<'] = 4;
+    inputTypeTable['>'] = 5;
+    inputTypeTable['='] = 6;
+
+    // Letters
+    for (char c = 'A'; c <= 'Z'; c++)
+        inputTypeTable[(unsigned char)c] = 7;
+    for (char c = 'a'; c <= 'z'; c++)
+        inputTypeTable[(unsigned char)c] = 7;
+
+    // Digits
+    for (char c = '0'; c <= '9'; c++)
+        inputTypeTable[(unsigned char)c] = 8;
+
+    inputTypeTable['e'] = 9; // Special case for 'e'
+
+    inputTypeTable['.'] = 10; // Dot
 }
 
-int isDigit(char c)
+/*
+    Returns the input type of a character
+    based on the input type lookup table
+*/
+int getInputType(char c)
 {
-    return (c >= '0' && c <= '9');
+    return inputTypeTable[(unsigned char)c];
 }
 
-int getInputType(char c) // TODO: check if more efficient way
-{
-    if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
-        return 0;
-    if (c == '(' || c == ')' || c == '[' || c == ']' || c == ',' || c == ';')
-        return 1;
-    if (c == '+' || c == '-')
-        return 2;
-    if (c == '*' || c == '/' || c == '%')
-        return 3;
-    if (c == '<')
-        return 4;
-    if (c == '>')
-        return 5;
-    if (c == '=')
-        return 6;
-    if (isLetter(c) && c != 'e')
-        return 7;
-    if (isDigit(c))
-        return 8;
-    if (c == 'e')
-        return 9;
-    if (c == '.')
-        return 10;
-    return 11;
-}
-
+/*
+    Compares two strings lexicographically
+    Returns 0 if the strings are equal
+    Returns a positive value if s1 > s2
+    Returns a negative value if s1 < s2
+*/
 int compareStrings(const char *s1, const char *s2)
 {
     while (*s1 && *s2 && (*s1 == *s2))
@@ -106,6 +128,10 @@ int compareStrings(const char *s1, const char *s2)
     return (unsigned char)*s1 - (unsigned char)*s2;
 }
 
+/*
+    Checks if a token is a keyword using binary search
+    on the sorted keywords array - O(log n) time
+*/
 int isKeyword(const char *token)
 {
     int left = 0;
@@ -132,6 +158,10 @@ int isKeyword(const char *token)
     return 0;
 }
 
+/*
+    Fills the double buffer with data from
+    the file. Returns the number of bytes read
+*/
 int fillBuffer()
 {
     if (currentBuffer == buffer1)
@@ -150,6 +180,12 @@ int fillBuffer()
     return bytesRead;
 }
 
+/*
+    Returns the next character from the buffer
+    If the buffer is empty, it fills the buffer
+    and returns the first character
+    Iterates the line number if the character is '\n'
+*/
 char getNextChar()
 {
     if (bufferIndex >= bytesRead)
@@ -158,57 +194,72 @@ char getNextChar()
             return '\0';
     }
     char c = currentBuffer[bufferIndex++];
+    columnNumber++;
     if (c == '\n')
+    {
+        columnNumber = 0;
         lineNumber++;
+    }
     return c;
 }
 
+/*
+    Returns the next token from the buffer
+    based on the DFA transition table
+*/
 int getNextToken(char *token, int *state)
 {
     int tokenIndex = 0;
     while (1)
     {
         char c = getNextChar();
-        if (c == '\0')
+        if (c == '\0') // End of file
         {
+            // If the last token ends in a non-acceptance state, it is an error token
             if (*state == DOUBLE_1 || *state == DOUBLE_2 || *state == DOUBLE_3)
             {
                 token[tokenIndex] = '\0';
                 *state = ERROR;
                 return 1;
             }
-            else if (*state != START)
+            // If the last token ends in the start state, there are no more tokens
+            else if (*state == START)
             {
-                token[tokenIndex] = '\0';
-                return 0;
-            }
-            else
                 return 1;
+            }
+            // If the last token ends in an acceptance state, it is a valid token
+            token[tokenIndex] = '\0';
+            return 0;
         }
 
         int inputType = getInputType(c);
         int nextState = transition_table[*state][inputType];
 
-        if (nextState == ERROR)
+        if (nextState == ERROR) // Invalid token
         {
             token[tokenIndex++] = c;
             token[tokenIndex] = '\0';
             *state = ERROR;
             return 1;
         }
-        else if (nextState == TERMINATE) // TODO: Try getting rid of terminate
+        else if (nextState == START) // Transistioned back to start state
         {
+            if (*state == START) // (Start -> Start) Skip whitespace
+            {
+                tokenIndex = 0;
+                continue;
+            }
+
+            // Token ended: Transistioned from an acceptance state to start state for the next token:
             token[tokenIndex] = '\0';
-            bufferIndex--;
+            bufferIndex--; // Move back one character for next token
             if (c == '\n')
-                lineNumber--;
+                lineNumber--; // Decrement line number if next char is newline character
+            else
+                columnNumber--; // Decrement column number if next char is not newline character
             return 0;
         }
-        else if (nextState == START)
-        {
-            tokenIndex = 0;
-        }
-        else
+        else // Continued transition - Add character to token
         {
             token[tokenIndex++] = c;
         }
@@ -225,9 +276,9 @@ void lexicalAnalysis()
         int state = START;
         int isValidToken = getNextToken(token, &state);
 
-        if (isValidToken == 0)
+        if (isValidToken == 0) // Valid token
         {
-            if (state == IDENTIFIER && isKeyword(token))
+            if (state == IDENTIFIER && isKeyword(token)) // Check if token is a keyword
             {
                 fprintf(outputFile, "Type: %-15s Token: %s\n", "KEYWORD", token);
             }
@@ -236,20 +287,25 @@ void lexicalAnalysis()
                 fprintf(outputFile, "Type: %-15s Token: %s\n", state_names[state], token);
             }
         }
-        else if (isValidToken == 1)
+        else if (isValidToken == 1) // Error token or end of file
         {
-            if (state == ERROR)
-                fprintf(errorFile, "Error (Line %d): Invalid token %s\n", lineNumber, token);
-            else
+            if (state == ERROR) // If in error state -> invalid token
+                fprintf(errorFile, "Error (Line %d, Column %d): Invalid token %s\n", lineNumber, columnNumber, token);
+            else // If no valid token returned and not in error state -> end of file
                 break;
         }
     }
 }
 
-// Main Function
-int main()
+int main(int argc, char *argv[])
 {
-    file = fopen("./Testing/Test7.cp", "r");
+    if (argc != 2)
+    {
+        fprintf(stderr, "Usage: %s <input_file>\n", argv[0]);
+        return 1;
+    }
+
+    file = fopen(argv[1], "r");
     if (file == NULL)
     {
         perror("Error opening file");
@@ -265,9 +321,13 @@ int main()
         return 1;
     }
 
+    initializeInputTypeTable();
     fillBuffer();
     lexicalAnalysis();
+
     fclose(file);
+    fclose(outputFile);
+    fclose(errorFile);
 
     return 0;
 }
