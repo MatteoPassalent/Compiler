@@ -1,0 +1,100 @@
+<program> ::= <fdecls> <declarations> <statement_seq>.
+
+<fdecls>  ::= <fdec>; <fdecls'>
+<fdecls> ::= e
+<fdecls'> ::= <fdec>; <fdecls'>
+<fdecls'> ::= e
+
+<fdec> ::= def <type> <fname> ( <params> ) <declarations> <statement_seq> fed
+
+<params> ::= <type> <var> <params'>
+<params> ::= e
+<params'> ::= , <params>
+<params'> ::= e
+
+<fname> ::= <id>
+
+<declarations> ::= <decl>; <declarations'>
+<declarations> ::= e
+<declarations'> ::= <decl>; <declarations'>
+<declarations'> ::= e
+
+<decl> := <type> <varlist>
+
+<type> ::= int
+<type> ::= double
+
+<varlist> ::= <var><varlist'>
+<varlist'> ::= , <varlist>
+<varlist'> ::= e
+
+<statement_seq> ::= <statement><statement_seq'>
+<statement_seq'> ::= ; <statement_seq>
+<statement_seq'> ::= e
+
+<statement> ::= <var> = <expr>
+<statement> ::= if <bexpr> then <statement_seq> <statement'>
+<statement'> ::= fi
+<statement'> ::= else <statement_seq> fi
+<statement> ::= while <bexpr> do <statement_seq> od
+<statement> ::= print <expr>
+<statement> ::= return <expr>
+<statement> ::= e
+
+<expr> ::= <term> <expr'>
+<expr'> ::= + <term> <expr'>
+<expr'> ::= - <term> <expr'>
+<expr'> ::= e
+
+<term> ::= <factor> <term'>
+<term'> ::= * <factor> <term'>
+<term'> ::= / <factor> <term'>
+<term'> ::= % <factor> <term'>
+<term'> ::= e
+
+<factor> ::= <var> 
+<factor> ::= <number> 
+<factor> ::= (<expr>) 
+<factor> ::= <fname>(<exprseq>)
+
+<exprseq> ::= <expr><exprseq'>
+<exprseq> ::= e
+<exprseq'> ::= , <exprseq>
+<exprseq'> ::= e
+
+<bexpr> ::= <bterm> <bexpr'>
+<bexpr'> ::= or <bterm> <bexpr'>
+<bexpr'> ::= e
+
+<bterm> ::= <bfactor> <bterm'>
+<bterm'> ::= and <bfactor> <bterm'>
+<bterm'> ::= e
+
+<bfactor> ::= not <bfactor>
+<bfactor> ::= (<bfactor'>)
+<bfactor'> ::= <bexpr>
+<bfactor'> ::= <expr> <comp> <expr>
+
+<comp> ::= < <comp'>
+<comp> ::= > <comp''>
+<comp> ::= ==
+<comp'> ::= =
+<comp'> ::= >
+<comp'> ::= e
+<comp''> ::= =
+<comp''> ::= e
+
+<var> ::= <id><var'>
+<var'> ::= [<expr>]
+<var'> ::= e
+
+<letter> ::= a | b | c | ... | z
+
+<digit> ::= 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 0
+
+<id> ::= <letter><id'>
+<id'> ::= <letter><id'>
+<id'> ::= <digit><id'>
+<id'> ::= e
+
+<number> ::= <integer> | <double>...

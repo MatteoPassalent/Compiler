@@ -1,0 +1,87 @@
+program ::= fdecls declarations statement_seq .
+
+fdecls  ::= fdec ; fdecls'
+fdecls ::= ''
+fdecls' ::= fdec ; fdecls'
+fdecls' ::= ''
+
+fdec ::= def type id ( params ) declarations statement_seq fed
+
+params ::= type var params'
+params ::= ''
+params' ::= , params
+params' ::= ''
+
+declarations ::= decl ; declarations'
+declarations ::= ''
+declarations' ::= decl ; declarations'
+declarations' ::= ''
+
+decl ::= type varlist
+
+type ::= int
+type ::= double
+
+varlist ::= var varlist'
+varlist' ::= , varlist
+varlist' ::= ''
+
+statement_seq ::= statement statement_seq'
+statement_seq' ::= ; statement_seq
+statement_seq' ::= ''
+
+statement ::= var = expr
+statement ::= if bexpr then statement_seq statement'
+statement' ::= fi
+statement' ::= else statement_seq fi
+statement ::= while bexpr do statement_seq od
+statement ::= print expr
+statement ::= return expr
+statement ::= ''
+
+expr ::= term expr'
+expr' ::= + term expr'
+expr' ::= - term expr'
+expr' ::= ''
+
+term ::= factor term'
+term' ::= * factor term'
+term' ::= / factor term'
+term' ::= % factor term'
+term' ::= ''
+
+factor ::= integers
+factor ::= doubles
+factor ::= ( expr )
+factor ::= id factor'
+factor' ::= var'
+factor' ::= ( exprseq )
+
+exprseq ::= expr exprseq'
+exprseq ::= ''
+exprseq' ::= , exprseq
+exprseq' ::= ''
+
+bexpr ::= bterm bexpr'
+bexpr' ::= or bterm bexpr'
+bexpr' ::= ''
+
+bterm ::= bfactor bterm'
+bterm' ::= and bfactor bterm'
+bterm' ::= ''
+
+bfactor ::= not bfactor
+bfactor ::= ( expr comp expr )
+
+comp ::= <
+comp ::= >
+comp ::= ==
+comp ::= <=
+comp ::= >=
+comp ::= <>
+
+var ::= id var'
+var' ::= [ expr ]
+var' ::= ''
+
+id ::= identifier
