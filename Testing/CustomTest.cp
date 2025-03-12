@@ -1,3 +1,10 @@
+def int func(double d1, int i2)
+    int testA;
+    int testB;
+    int testC;
+    testC = testA + testB;
+    12testC = testC * 2
+fed;
 int x,i;
 x=0;i=1;
 _1_2a*

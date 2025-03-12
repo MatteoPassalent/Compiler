@@ -1,8 +1,15 @@
-package main
+package lexer
 
 import (
+	"fmt"
+	"log"
 	"os"
 )
+
+type Token struct {
+	Type  string
+	Value string
+}
 
 const BUFFER_SIZE = 1024
 const START = 0
@@ -21,17 +28,19 @@ const ERROR = 12
 
 // Initialize file pointers, buffers, and buffer variables
 var (
-	file          *os.File
-	outputFile    *os.File
-	errorFile     *os.File
-	buffer1       = make([]byte, BUFFER_SIZE+1)
-	buffer2       = make([]byte, BUFFER_SIZE+1)
-	currentBuffer = buffer1
-	bufferFlag    = 1
-	bufferIndex   int
-	bytesRead     int
-	lineNumber    = 1
-	columnNumber  int
+	file              *os.File
+	lexicalOutputFile *os.File
+	lexicalErrorFile  *os.File
+	buffer1           = make([]byte, BUFFER_SIZE+1)
+	buffer2           = make([]byte, BUFFER_SIZE+1)
+	currentBuffer     = buffer1
+	bufferFlag        = 1
+	bufferIndex       int
+	bytesRead         int
+	LineNumber        = 1
+	ColumnNumber      int
+	IsPanicMode       = false
+	isInputTableInit  = false
 )
 
 // Initialize transition table from DFA
@@ -108,7 +117,7 @@ func initializeInputTypeTable() {
 
 	// Digits
 	for character := '0'; character <= '9'; character++ {
-		inputTypeTable[character] = 7
+		inputTypeTable[character] = 8
 	}
 
 	inputTypeTable['e'] = 9 // Special case for 'e'
@@ -121,6 +130,10 @@ Returns the input type of a character
 based on the input type lookup table
 */
 func getInputType(c rune) int {
+	if !isInputTableInit {
+		initializeInputTypeTable()
+		isInputTableInit = true
+	}
 	return inputTypeTable[c]
 }
 
@@ -177,10 +190,10 @@ func getNextChar() rune {
 	}
 	c := rune(currentBuffer[bufferIndex])
 	bufferIndex++
-	columnNumber++
+	ColumnNumber++
 	if c == '\n' {
-		columnNumber = 0
-		lineNumber++
+		ColumnNumber = 0
+		LineNumber++
 	}
 	return c
 }
@@ -189,27 +202,36 @@ func getNextChar() rune {
 Returns the next token from the buffer
 based on the DFA transition table
 */
-func getNextToken() Token {
-	var token string
+func GetNextToken() Token {
+	var tokenVal string
 	state := START
 	for {
 		c := getNextChar()
 		if c == -1 { // End of file
 			// If the last token ends in a non-acceptance state, it is an error token
 			if state == DOUBLE_1 || state == DOUBLE_2 || state == DOUBLE_3 {
-				return Token{stateNames[state], token}
+				token := Token{"ERROR", tokenVal}
+				writeError(token)
+				return token
 				// If the last token ends in the start state, there are no more tokens
 			} else if state == START {
-				return Token{"EOF", token}
+				return Token{"EOF", tokenVal}
 			}
 			// If the last token ends in an acceptance state, return the token
-			return Token{stateNames[state], token}
+			token := Token{stateNames[state], tokenVal}
+			writeToken(token)
+			return token
 		}
 
 		nextState := transitionTable[state][getInputType(c)]
 		if nextState == ERROR { // Invalid token
-			token += string(c)
-			return Token{stateNames[state], token}
+			tokenVal += string(c)
+			token := Token{"ERROR", tokenVal}
+			writeError(token)
+			if !IsPanicMode {
+				ErrorRecovery()
+			}
+			return token
 		} else if nextState == START { // Transistioned back to start state
 			if state == START { // (Start -> Start) Skip whitespace
 				continue
@@ -217,17 +239,61 @@ func getNextToken() Token {
 			// Token ended: Transistioned from an acceptance state to start state for the next token
 			bufferIndex-- // Move back one character for next token
 			if c == '\n' {
-				lineNumber-- // Decrement line number if next char is newline character
+				LineNumber-- // Decrement line number if next char is newline character
 			} else {
-				columnNumber-- // Decrement column number if next char is not newline character
+				ColumnNumber-- // Decrement column number if next char is not newline character
 			}
-			if state == IDENTIFIER && isKeyword(token) {
-				return Token{"KEYWORD", token}
+			if state == IDENTIFIER && isKeyword(tokenVal) {
+				token := Token{"KEYWORD", tokenVal}
+				writeToken(token)
+				return token
 			}
-			return Token{stateNames[state], token}
+			token := Token{stateNames[state], tokenVal}
+			writeToken(token)
+			return token
 		} else { // Continued transition - Add character to token
-			token += string(c)
+			tokenVal += string(c)
 		}
 		state = nextState
 	}
+}
+
+func ErrorRecovery() {
+	IsPanicMode = true
+	for {
+		token := GetNextToken()
+		if token.Type == "EOF" {
+			break
+		}
+	}
+}
+
+func writeToken(token Token) {
+	fmt.Fprintf(lexicalOutputFile, "Type: %-15s Token: %s\n", token.Type, token.Value)
+}
+
+func writeError(token Token) {
+	fmt.Fprintf(lexicalErrorFile, "Error (Line %d, Column %d): Invalid token %s\n", LineNumber, ColumnNumber, token.Value)
+}
+
+func InitLexerFiles() {
+	var err error
+	file, err = os.Open("Testing/CustomTest.cp")
+	if err != nil {
+		log.Fatal("Error opening file:", err)
+	}
+	lexicalOutputFile, err = os.Create("lexer/lexical_output.txt")
+	if err != nil {
+		log.Fatal("Error creating output file:", err)
+	}
+	lexicalErrorFile, err = os.Create("lexer/lexical_errors.txt")
+	if err != nil {
+		log.Fatal("Error creating error file:", err)
+	}
+}
+
+func CloseLexerFiles() {
+	defer file.Close()
+	defer lexicalOutputFile.Close()
+	defer lexicalErrorFile.Close()
 }

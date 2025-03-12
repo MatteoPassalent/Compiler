@@ -1,4 +1,4 @@
-package main
+package parser
 
 var ll1 = [33][39]string{
 	// . ; def ( ) fed , int double = if then fi else while do od print return + - * / % or and not < > == [ ] letters digits integers doubles
