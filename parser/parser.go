@@ -14,20 +14,14 @@ var syntaxErrorFile *os.File
 var currentToken Token
 
 type ASTnode struct {
-	symbol     string
-	children   []ASTnode
-	childCount int
-}
-
-func (n *ASTnode) init(symbol string) {
-	n.symbol = symbol
-	n.children = make([]ASTnode, 0)
-	n.childCount = 0
+	Symbol   string
+	Lexeme   string
+	Type     string
+	Children []ASTnode
 }
 
 func (n *ASTnode) addChild(child ASTnode) {
-	n.children = append(n.children, child)
-	n.childCount++
+	n.Children = append(n.Children, child)
 }
 
 func parse(nonTerminal string) ASTnode {
@@ -36,33 +30,37 @@ func parse(nonTerminal string) ASTnode {
 		writeSyntaxError("Error: Invalid non-terminal " + nonTerminal) // Issue with LL1 table
 		return ASTnode{}
 	}
-	currentTokenIndex, tokenExists := terminalMap[currentToken.Value]
+	currentTokenIndex, tokenExists := terminalMap[currentToken.Symbol]
 	if !tokenExists {
-		writeSyntaxError("Error: Invalid terminal " + currentToken.Value) // Issue with LL1 or lexical
+		writeSyntaxError("Error: Invalid terminal " + currentToken.Lexeme) // Issue with LL1 or lexical
 		return ASTnode{}
 	}
 	rule := ll1[nonTerminalIndex][currentTokenIndex]
+
 	if rule == "" {
-		writeSyntaxError("Error: Unexpected " + currentToken.Value) // Syntax error
+		fmt.Println("nonTerminal", nonTerminalIndex)
+		fmt.Println("currentToken", currentTokenIndex)
+		writeSyntaxError("Error: Unexpected " + currentToken.Lexeme) // Syntax error
 		return ASTnode{}
 	}
 
-	node := ASTnode{symbol: nonTerminal}
+	node := ASTnode{Symbol: nonTerminal}
 
 	rules := strings.Split(rule, " ")
 	for _, symbol := range rules[1:] { // Discard first element (current non-terminal)
 		_, exists := nonTerminalMap[symbol]
 		if exists {
 			child := parse(symbol) // Recursively parse non-terminals
-			if child.symbol == "" {
+			if child.Symbol == "" {
 				return ASTnode{} // Return up call stack if error occured
 			}
 			node.addChild(child)
-		} else if symbol == currentToken.Value {
-			node.addChild(ASTnode{symbol: symbol})
-			currentToken = retrieveAndValidateToken()
+		} else if symbol == currentToken.Symbol {
+			leafNode := ASTnode{Symbol: symbol, Lexeme: currentToken.Lexeme, Type: currentToken.Type}
+			node.addChild(leafNode)
+			currentToken = lexer.GetNextToken()
 			if currentToken.Type == "ERROR" { // Invalid token, stop syntax parsing
-				fmt.Println("Error: Invalid token", currentToken.Value)
+				fmt.Println("Error: Invalid token", currentToken.Lexeme)
 				return ASTnode{}
 			}
 			if currentToken.Type == "EOF" {
@@ -83,32 +81,25 @@ func parse(nonTerminal string) ASTnode {
 	return node
 }
 
-func retrieveAndValidateToken() Token {
-	token := lexer.GetNextToken()
-	if token.Type == "IDENTIFIER" || token.Type == "INTEGER" || token.Type == "DOUBLE" {
-		token.Value = token.Type // Syntax parsing only needs to know type classification
-	}
-	return token
-}
-
 func writeSyntaxError(err string) {
 	errorMessage := fmt.Sprintf("%s at line %d column %d", err, lexer.LineNumber, lexer.ColumnNumber)
 	fmt.Println(errorMessage)
 	fmt.Fprintln(syntaxErrorFile, errorMessage)
 }
 
-func StartParser() {
+func StartParser() ASTnode {
 	var err error
 	syntaxErrorFile, err = os.Create("parser/syntax_errors.txt")
 	if err != nil {
 		log.Fatal("Error creating syntax_errors.txt")
 	}
-	currentToken = retrieveAndValidateToken() // get first token
+	currentToken = lexer.GetNextToken() // get first token
 	root := parse("program")
-	if root.symbol == "" && !lexer.IsPanicMode {
+	if root.Symbol == "" && !lexer.IsPanicMode {
 		lexer.ErrorRecovery() // Init error recovery for lexer
-		return
+		return ASTnode{}
 	}
+	return root
 }
 
 func CloseParserFiles() {

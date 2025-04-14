@@ -7,8 +7,19 @@ import (
 )
 
 type Token struct {
-	Type  string
-	Value string
+	Type   string
+	Lexeme string
+	Symbol string
+}
+
+func (token *Token) init(tokenType string, lexeme string) {
+	token.Type = tokenType
+	token.Lexeme = lexeme
+	if tokenType == "INTEGER" || tokenType == "DOUBLE" || tokenType == "IDENTIFIER" {
+		token.Symbol = tokenType
+	} else {
+		token.Symbol = lexeme
+	}
 }
 
 const BUFFER_SIZE = 1024
@@ -210,15 +221,19 @@ func GetNextToken() Token {
 		if c == -1 { // End of file
 			// If the last token ends in a non-acceptance state, it is an error token
 			if state == DOUBLE_1 || state == DOUBLE_2 || state == DOUBLE_3 {
-				token := Token{"ERROR", tokenVal}
+				token := Token{}
+				token.init("ERROR", tokenVal)
 				writeError(token)
 				return token
 				// If the last token ends in the start state, there are no more tokens
 			} else if state == START {
-				return Token{"EOF", tokenVal}
+				token := Token{}
+				token.init("EOF", tokenVal)
+				return token
 			}
 			// If the last token ends in an acceptance state, return the token
-			token := Token{stateNames[state], tokenVal}
+			token := Token{}
+			token.init(stateNames[state], tokenVal)
 			writeToken(token)
 			return token
 		}
@@ -226,7 +241,8 @@ func GetNextToken() Token {
 		nextState := transitionTable[state][getInputType(c)]
 		if nextState == ERROR { // Invalid token
 			tokenVal += string(c)
-			token := Token{"ERROR", tokenVal}
+			token := Token{}
+			token.init("ERROR", tokenVal)
 			writeError(token)
 			if !IsPanicMode {
 				ErrorRecovery()
@@ -244,11 +260,13 @@ func GetNextToken() Token {
 				ColumnNumber-- // Decrement column number if next char is not newline character
 			}
 			if state == IDENTIFIER && isKeyword(tokenVal) {
-				token := Token{"KEYWORD", tokenVal}
+				token := Token{}
+				token.init("KEYWORD", tokenVal)
 				writeToken(token)
 				return token
 			}
-			token := Token{stateNames[state], tokenVal}
+			token := Token{}
+			token.init(stateNames[state], tokenVal)
 			writeToken(token)
 			return token
 		} else { // Continued transition - Add character to token
@@ -269,16 +287,16 @@ func ErrorRecovery() {
 }
 
 func writeToken(token Token) {
-	fmt.Fprintf(lexicalOutputFile, "Type: %-15s Token: %s\n", token.Type, token.Value)
+	fmt.Fprintf(lexicalOutputFile, "Type: %-15s Token: %s\n", token.Type, token.Lexeme)
 }
 
 func writeError(token Token) {
-	fmt.Fprintf(lexicalErrorFile, "Error (Line %d, Column %d): Invalid token %s\n", LineNumber, ColumnNumber, token.Value)
+	fmt.Fprintf(lexicalErrorFile, "Error (Line %d, Column %d): Invalid token %s\n", LineNumber, ColumnNumber, token.Lexeme)
 }
 
 func InitLexerFiles() {
 	var err error
-	file, err = os.Open("Testing/CustomTest.cp")
+	file, err = os.Open("Testing/Test8.cp")
 	if err != nil {
 		log.Fatal("Error opening file:", err)
 	}
