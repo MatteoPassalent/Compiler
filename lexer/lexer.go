@@ -10,11 +10,13 @@ type Token struct {
 	Type   string
 	Lexeme string
 	Symbol string
+	Line   int
 }
 
-func (token *Token) init(tokenType string, lexeme string) {
+func (token *Token) init(tokenType string, lexeme string, line int) {
 	token.Type = tokenType
 	token.Lexeme = lexeme
+	token.Line = line
 	if tokenType == "INTEGER" || tokenType == "DOUBLE" || tokenType == "IDENTIFIER" {
 		token.Symbol = tokenType
 	} else {
@@ -222,18 +224,18 @@ func GetNextToken() Token {
 			// If the last token ends in a non-acceptance state, it is an error token
 			if state == DOUBLE_1 || state == DOUBLE_2 || state == DOUBLE_3 {
 				token := Token{}
-				token.init("ERROR", tokenVal)
+				token.init("ERROR", tokenVal, LineNumber)
 				writeError(token)
 				return token
 				// If the last token ends in the start state, there are no more tokens
 			} else if state == START {
 				token := Token{}
-				token.init("EOF", tokenVal)
+				token.init("EOF", tokenVal, LineNumber)
 				return token
 			}
 			// If the last token ends in an acceptance state, return the token
 			token := Token{}
-			token.init(stateNames[state], tokenVal)
+			token.init(stateNames[state], tokenVal, LineNumber)
 			writeToken(token)
 			return token
 		}
@@ -242,7 +244,7 @@ func GetNextToken() Token {
 		if nextState == ERROR { // Invalid token
 			tokenVal += string(c)
 			token := Token{}
-			token.init("ERROR", tokenVal)
+			token.init("ERROR", tokenVal, LineNumber)
 			writeError(token)
 			if !IsPanicMode {
 				ErrorRecovery()
@@ -261,12 +263,12 @@ func GetNextToken() Token {
 			}
 			if state == IDENTIFIER && isKeyword(tokenVal) {
 				token := Token{}
-				token.init("KEYWORD", tokenVal)
+				token.init("KEYWORD", tokenVal, LineNumber)
 				writeToken(token)
 				return token
 			}
 			token := Token{}
-			token.init(stateNames[state], tokenVal)
+			token.init(stateNames[state], tokenVal, LineNumber)
 			writeToken(token)
 			return token
 		} else { // Continued transition - Add character to token
@@ -294,12 +296,9 @@ func writeError(token Token) {
 	fmt.Fprintf(lexicalErrorFile, "Error (Line %d, Column %d): Invalid token %s\n", LineNumber, ColumnNumber, token.Lexeme)
 }
 
-func InitLexerFiles() {
+func InitLexerFiles(sourceFile *os.File) {
 	var err error
-	file, err = os.Open("Testing/Test8.cp")
-	if err != nil {
-		log.Fatal("Error opening file:", err)
-	}
+	file = sourceFile
 	lexicalOutputFile, err = os.Create("lexer/lexical_output.txt")
 	if err != nil {
 		log.Fatal("Error creating output file:", err)

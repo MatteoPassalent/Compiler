@@ -1,7 +1,7 @@
 def int gcd(int a, int b)
 int r;
 if (a<0) then a = a fi;
-if b<0 then b = -b fi;
+if (b<0) then b = b fi;
 
 if (a<b) then r=a; a=b; b=r fi;
 while (b<>0) do

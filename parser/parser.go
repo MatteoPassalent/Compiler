@@ -17,6 +17,7 @@ type ASTnode struct {
 	Symbol   string
 	Lexeme   string
 	Type     string
+	Line     int
 	Children []ASTnode
 }
 
@@ -38,8 +39,6 @@ func parse(nonTerminal string) ASTnode {
 	rule := ll1[nonTerminalIndex][currentTokenIndex]
 
 	if rule == "" {
-		fmt.Println("nonTerminal", nonTerminalIndex)
-		fmt.Println("currentToken", currentTokenIndex)
 		writeSyntaxError("Error: Unexpected " + currentToken.Lexeme) // Syntax error
 		return ASTnode{}
 	}
@@ -56,7 +55,7 @@ func parse(nonTerminal string) ASTnode {
 			}
 			node.addChild(child)
 		} else if symbol == currentToken.Symbol {
-			leafNode := ASTnode{Symbol: symbol, Lexeme: currentToken.Lexeme, Type: currentToken.Type}
+			leafNode := ASTnode{Symbol: symbol, Lexeme: currentToken.Lexeme, Type: currentToken.Type, Line: currentToken.Line}
 			node.addChild(leafNode)
 			currentToken = lexer.GetNextToken()
 			if currentToken.Type == "ERROR" { // Invalid token, stop syntax parsing
@@ -81,10 +80,71 @@ func parse(nonTerminal string) ASTnode {
 	return node
 }
 
+// TODO: error handling
 func writeSyntaxError(err string) {
 	errorMessage := fmt.Sprintf("%s at line %d column %d", err, lexer.LineNumber, lexer.ColumnNumber)
 	fmt.Println(errorMessage)
 	fmt.Fprintln(syntaxErrorFile, errorMessage)
+}
+
+func CloseParserFiles() {
+	defer syntaxErrorFile.Close()
+}
+
+// VisualizeAST writes a text-based representation of the AST to a file
+func VisualizeAST(root *ASTnode, filePath string) {
+	file, err := os.Create(filePath)
+	if err != nil {
+		log.Fatalf("Error creating file: %v", err)
+	}
+	defer file.Close()
+
+	visualizeNode(root, "", true, file)
+}
+
+// visualizeNode is a recursive helper function for VisualizeAST
+func visualizeNode(node *ASTnode, prefix string, isLast bool, file *os.File) {
+	if node == nil {
+		return
+	}
+
+	// Create the tree-like structure
+	marker := "└── "
+	if !isLast {
+		marker = "├── "
+	}
+
+	// Print the current node with appropriate formatting
+	nodeInfo := fmt.Sprintf("%s%s%s", prefix, marker, node.Symbol)
+
+	// Add additional node information
+	details := []string{}
+	if node.Lexeme != "" {
+		details = append(details, fmt.Sprintf("lexeme=%s", node.Lexeme))
+	}
+	if node.Type != "" {
+		details = append(details, fmt.Sprintf("type=%s", node.Type))
+	}
+
+	if len(details) > 0 {
+		nodeInfo += " (" + strings.Join(details, ", ") + ")"
+	}
+
+	fmt.Fprintln(file, nodeInfo)
+
+	// Calculate the prefix for child nodes
+	childPrefix := prefix
+	if isLast {
+		childPrefix += "    "
+	} else {
+		childPrefix += "│   "
+	}
+
+	// Recursively visualize children
+	for i, child := range node.Children {
+		isLastChild := i == len(node.Children)-1
+		visualizeNode(&child, childPrefix, isLastChild, file)
+	}
 }
 
 func StartParser() ASTnode {
@@ -99,9 +159,6 @@ func StartParser() ASTnode {
 		lexer.ErrorRecovery() // Init error recovery for lexer
 		return ASTnode{}
 	}
+	VisualizeAST(&root, "parser/ast_visualization.txt")
 	return root
-}
-
-func CloseParserFiles() {
-	defer syntaxErrorFile.Close()
 }

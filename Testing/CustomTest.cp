@@ -1,17 +1,14 @@
-def int func(double d1, int i2)
-    int testA;
-    int testB;
-    int testC;
-    testC = testA + testB;
-    12testC = testC * 2
+def int function(double a, double b)
+    int d;
+    while (a <> 4) do
+        a = a + b
+    od;
+    return d
 fed;
-int x,i;
-x=0;i=1;
-_1_2a*
-3.0eZ[]<=>=<>>><<!==test
--3e3.001
-while(i<10) do
-    123$456
-	x = x+i*i; i=i+1
-od;
-print(x);.LASTTOKEN
+double c;
+c = function(1.1, 2.2);
+if (c >= 4) then
+    print e;
+fi
+
+.

@@ -1,0 +1,209 @@
+└── program
+    ├── fdecls
+    │   ├── fdec
+    │   │   ├── def (lexeme=def, type=KEYWORD)
+    │   │   ├── type
+    │   │   │   └── int (lexeme=int, type=KEYWORD)
+    │   │   ├── id
+    │   │   │   └── IDENTIFIER (lexeme=function, type=IDENTIFIER)
+    │   │   ├── ( (lexeme=(, type=PUNCTUATION)
+    │   │   ├── params
+    │   │   │   ├── type
+    │   │   │   │   └── double (lexeme=double, type=KEYWORD)
+    │   │   │   ├── var
+    │   │   │   │   ├── id
+    │   │   │   │   │   └── IDENTIFIER (lexeme=a, type=IDENTIFIER)
+    │   │   │   │   └── var'
+    │   │   │   └── params'
+    │   │   │       ├── , (lexeme=,, type=PUNCTUATION)
+    │   │   │       └── params
+    │   │   │           ├── type
+    │   │   │           │   └── double (lexeme=double, type=KEYWORD)
+    │   │   │           ├── var
+    │   │   │           │   ├── id
+    │   │   │           │   │   └── IDENTIFIER (lexeme=b, type=IDENTIFIER)
+    │   │   │           │   └── var'
+    │   │   │           └── params'
+    │   │   ├── ) (lexeme=), type=PUNCTUATION)
+    │   │   ├── declarations
+    │   │   │   ├── decl
+    │   │   │   │   ├── type
+    │   │   │   │   │   └── int (lexeme=int, type=KEYWORD)
+    │   │   │   │   └── varlist
+    │   │   │   │       ├── var
+    │   │   │   │       │   ├── id
+    │   │   │   │       │   │   └── IDENTIFIER (lexeme=d, type=IDENTIFIER)
+    │   │   │   │       │   └── var'
+    │   │   │   │       └── varlist'
+    │   │   │   ├── ; (lexeme=;, type=PUNCTUATION)
+    │   │   │   └── declarations'
+    │   │   ├── statement_seq
+    │   │   │   ├── statement
+    │   │   │   │   ├── while (lexeme=while, type=KEYWORD)
+    │   │   │   │   ├── bexpr
+    │   │   │   │   │   ├── bterm
+    │   │   │   │   │   │   ├── bfactor
+    │   │   │   │   │   │   │   ├── ( (lexeme=(, type=PUNCTUATION)
+    │   │   │   │   │   │   │   ├── expr
+    │   │   │   │   │   │   │   │   ├── term
+    │   │   │   │   │   │   │   │   │   ├── factor
+    │   │   │   │   │   │   │   │   │   │   ├── id
+    │   │   │   │   │   │   │   │   │   │   │   └── IDENTIFIER (lexeme=a, type=IDENTIFIER)
+    │   │   │   │   │   │   │   │   │   │   └── factor'
+    │   │   │   │   │   │   │   │   │   │       └── var'
+    │   │   │   │   │   │   │   │   │   └── term'
+    │   │   │   │   │   │   │   │   └── expr'
+    │   │   │   │   │   │   │   ├── comp
+    │   │   │   │   │   │   │   │   └── <> (lexeme=<>, type=OPERATOR)
+    │   │   │   │   │   │   │   ├── expr
+    │   │   │   │   │   │   │   │   ├── term
+    │   │   │   │   │   │   │   │   │   ├── factor
+    │   │   │   │   │   │   │   │   │   │   └── INTEGER (lexeme=4, type=INTEGER)
+    │   │   │   │   │   │   │   │   │   └── term'
+    │   │   │   │   │   │   │   │   └── expr'
+    │   │   │   │   │   │   │   └── ) (lexeme=), type=PUNCTUATION)
+    │   │   │   │   │   │   └── bterm'
+    │   │   │   │   │   └── bexpr'
+    │   │   │   │   ├── do (lexeme=do, type=KEYWORD)
+    │   │   │   │   ├── statement_seq
+    │   │   │   │   │   ├── statement
+    │   │   │   │   │   │   ├── var
+    │   │   │   │   │   │   │   ├── id
+    │   │   │   │   │   │   │   │   └── IDENTIFIER (lexeme=a, type=IDENTIFIER)
+    │   │   │   │   │   │   │   └── var'
+    │   │   │   │   │   │   ├── = (lexeme==, type=OPERATOR)
+    │   │   │   │   │   │   └── expr
+    │   │   │   │   │   │       ├── term
+    │   │   │   │   │   │       │   ├── factor
+    │   │   │   │   │   │       │   │   ├── id
+    │   │   │   │   │   │       │   │   │   └── IDENTIFIER (lexeme=a, type=IDENTIFIER)
+    │   │   │   │   │   │       │   │   └── factor'
+    │   │   │   │   │   │       │   │       └── var'
+    │   │   │   │   │   │       │   └── term'
+    │   │   │   │   │   │       └── expr'
+    │   │   │   │   │   │           ├── + (lexeme=+, type=OPERATOR)
+    │   │   │   │   │   │           ├── term
+    │   │   │   │   │   │           │   ├── factor
+    │   │   │   │   │   │           │   │   ├── id
+    │   │   │   │   │   │           │   │   │   └── IDENTIFIER (lexeme=b, type=IDENTIFIER)
+    │   │   │   │   │   │           │   │   └── factor'
+    │   │   │   │   │   │           │   │       └── var'
+    │   │   │   │   │   │           │   └── term'
+    │   │   │   │   │   │           └── expr'
+    │   │   │   │   │   └── statement_seq'
+    │   │   │   │   └── od (lexeme=od, type=KEYWORD)
+    │   │   │   └── statement_seq'
+    │   │   │       ├── ; (lexeme=;, type=PUNCTUATION)
+    │   │   │       └── statement_seq
+    │   │   │           ├── statement
+    │   │   │           │   ├── return (lexeme=return, type=KEYWORD)
+    │   │   │           │   └── expr
+    │   │   │           │       ├── term
+    │   │   │           │       │   ├── factor
+    │   │   │           │       │   │   ├── id
+    │   │   │           │       │   │   │   └── IDENTIFIER (lexeme=d, type=IDENTIFIER)
+    │   │   │           │       │   │   └── factor'
+    │   │   │           │       │   │       └── var'
+    │   │   │           │       │   └── term'
+    │   │   │           │       └── expr'
+    │   │   │           └── statement_seq'
+    │   │   └── fed (lexeme=fed, type=KEYWORD)
+    │   ├── ; (lexeme=;, type=PUNCTUATION)
+    │   └── fdecls'
+    ├── declarations
+    │   ├── decl
+    │   │   ├── type
+    │   │   │   └── double (lexeme=double, type=KEYWORD)
+    │   │   └── varlist
+    │   │       ├── var
+    │   │       │   ├── id
+    │   │       │   │   └── IDENTIFIER (lexeme=c, type=IDENTIFIER)
+    │   │       │   └── var'
+    │   │       └── varlist'
+    │   ├── ; (lexeme=;, type=PUNCTUATION)
+    │   └── declarations'
+    ├── statement_seq
+    │   ├── statement
+    │   │   ├── var
+    │   │   │   ├── id
+    │   │   │   │   └── IDENTIFIER (lexeme=c, type=IDENTIFIER)
+    │   │   │   └── var'
+    │   │   ├── = (lexeme==, type=OPERATOR)
+    │   │   └── expr
+    │   │       ├── term
+    │   │       │   ├── factor
+    │   │       │   │   ├── id
+    │   │       │   │   │   └── IDENTIFIER (lexeme=function, type=IDENTIFIER)
+    │   │       │   │   └── factor'
+    │   │       │   │       ├── ( (lexeme=(, type=PUNCTUATION)
+    │   │       │   │       ├── exprseq
+    │   │       │   │       │   ├── expr
+    │   │       │   │       │   │   ├── term
+    │   │       │   │       │   │   │   ├── factor
+    │   │       │   │       │   │   │   │   └── DOUBLE (lexeme=1.1, type=DOUBLE)
+    │   │       │   │       │   │   │   └── term'
+    │   │       │   │       │   │   └── expr'
+    │   │       │   │       │   └── exprseq'
+    │   │       │   │       │       ├── , (lexeme=,, type=PUNCTUATION)
+    │   │       │   │       │       └── exprseq
+    │   │       │   │       │           ├── expr
+    │   │       │   │       │           │   ├── term
+    │   │       │   │       │           │   │   ├── factor
+    │   │       │   │       │           │   │   │   └── DOUBLE (lexeme=2.2, type=DOUBLE)
+    │   │       │   │       │           │   │   └── term'
+    │   │       │   │       │           │   └── expr'
+    │   │       │   │       │           └── exprseq'
+    │   │       │   │       └── ) (lexeme=), type=PUNCTUATION)
+    │   │       │   └── term'
+    │   │       └── expr'
+    │   └── statement_seq'
+    │       ├── ; (lexeme=;, type=PUNCTUATION)
+    │       └── statement_seq
+    │           ├── statement
+    │           │   ├── if (lexeme=if, type=KEYWORD)
+    │           │   ├── bexpr
+    │           │   │   ├── bterm
+    │           │   │   │   ├── bfactor
+    │           │   │   │   │   ├── ( (lexeme=(, type=PUNCTUATION)
+    │           │   │   │   │   ├── expr
+    │           │   │   │   │   │   ├── term
+    │           │   │   │   │   │   │   ├── factor
+    │           │   │   │   │   │   │   │   ├── id
+    │           │   │   │   │   │   │   │   │   └── IDENTIFIER (lexeme=c, type=IDENTIFIER)
+    │           │   │   │   │   │   │   │   └── factor'
+    │           │   │   │   │   │   │   │       └── var'
+    │           │   │   │   │   │   │   └── term'
+    │           │   │   │   │   │   └── expr'
+    │           │   │   │   │   ├── comp
+    │           │   │   │   │   │   └── >= (lexeme=>=, type=OPERATOR)
+    │           │   │   │   │   ├── expr
+    │           │   │   │   │   │   ├── term
+    │           │   │   │   │   │   │   ├── factor
+    │           │   │   │   │   │   │   │   └── INTEGER (lexeme=4, type=INTEGER)
+    │           │   │   │   │   │   │   └── term'
+    │           │   │   │   │   │   └── expr'
+    │           │   │   │   │   └── ) (lexeme=), type=PUNCTUATION)
+    │           │   │   │   └── bterm'
+    │           │   │   └── bexpr'
+    │           │   ├── then (lexeme=then, type=KEYWORD)
+    │           │   ├── statement_seq
+    │           │   │   ├── statement
+    │           │   │   │   ├── print (lexeme=print, type=KEYWORD)
+    │           │   │   │   └── expr
+    │           │   │   │       ├── term
+    │           │   │   │       │   ├── factor
+    │           │   │   │       │   │   ├── id
+    │           │   │   │       │   │   │   └── IDENTIFIER (lexeme=e, type=IDENTIFIER)
+    │           │   │   │       │   │   └── factor'
+    │           │   │   │       │   │       └── var'
+    │           │   │   │       │   └── term'
+    │           │   │   │       └── expr'
+    │           │   │   └── statement_seq'
+    │           │   │       ├── ; (lexeme=;, type=PUNCTUATION)
+    │           │   │       └── statement_seq
+    │           │   │           ├── statement
+    │           │   │           └── statement_seq'
+    │           │   └── statement'
+    │           │       └── fi (lexeme=fi, type=KEYWORD)
+    │           └── statement_seq'
+    └── . (lexeme=., type=PUNCTUATION)

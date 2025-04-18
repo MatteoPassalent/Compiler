@@ -3,11 +3,13 @@ package semantic
 import (
 	"Compiler/parser"
 	"fmt"
+	"log"
 	"os"
-	"strings" // Import strings package for indentation
+	"strings"
+)
 
-	"github.com/fatih/color"
-	"github.com/olekukonko/tablewriter"
+var (
+	semanticErrorFile *os.File
 )
 
 type ASTnode = parser.ASTnode
@@ -22,17 +24,16 @@ type SymbolTableEntry struct {
 
 type SymbolTable struct {
 	Entries map[string]SymbolTableEntry
-	Parent  *SymbolTable // Pointer to parent scope (for nested scopes)
+	Parent  *SymbolTable
 }
 
 var currentType string
 var inDeclContext bool
-var currentFunctionReturnType string // Track current function's return type
+var currentFunctionReturnType string
 
-// Add function to track function parameters
 type FunctionInfo struct {
 	ReturnType string
-	Parameters map[string]string // parameter name -> type
+	Parameters map[string]string
 }
 
 var currentFunction *FunctionInfo
@@ -40,16 +41,32 @@ var currentFunction *FunctionInfo
 var scopeStack []*SymbolTable
 var allScopes []*SymbolTable
 
+/**
+ * Function to push a new scope onto the stack
+ * This allows for nested scopes in the symbol table
+ * Each new scope can have its own set of symbols
+ */
 func pushScope() {
 	newScope := &SymbolTable{Entries: make(map[string]SymbolTableEntry), Parent: currentScope()}
 	scopeStack = append(scopeStack, newScope)
 	allScopes = append(allScopes, newScope)
 }
 
+/**
+ * Function to pop the current scope off the stack
+ * This is used when exiting a block of code
+ * The current scope is removed from the stack
+ * and the parent scope becomes the current scope
+ */
 func popScope() {
 	scopeStack = scopeStack[:len(scopeStack)-1]
 }
 
+/**
+ * Function to get the current scope
+ * This returns the top scope on the stack
+ * If the stack is empty, it returns nil
+ */
 func currentScope() *SymbolTable {
 	if len(scopeStack) == 0 {
 		return nil
@@ -57,22 +74,26 @@ func currentScope() *SymbolTable {
 	return scopeStack[len(scopeStack)-1]
 }
 
-func addSymbol(typ string, token string, lexeme string, params map[string]string) {
+/**
+ * Function to add a symbol to the current scope
+ * Checks for redeclaration and adds the symbol to the current scope
+ */
+func addSymbol(typ string, token string, lexeme string, params map[string]string, line int) {
 	current := currentScope()
 	if current == nil {
-		fmt.Println("Error: No active scope to add symbol")
+		fmt.Fprintln(semanticErrorFile, "Error: No active scope to add symbol")
 		return
 	}
 
 	// Check for redeclaration in the current scope
-	if _, exists := current.Entries[lexeme]; exists {
-		fmt.Printf("Error: Redeclaration of variable '%s'", lexeme)
+	if _, exists := current.Entries[lexeme]; exists && token == "IDENTIFIER" {
+		fmt.Fprintf(semanticErrorFile, "Error: Redeclaration of variable '%s'\n", lexeme)
 		return
 	}
 
 	// Add the symbol to the current scope
 	current.Entries[lexeme] = SymbolTableEntry{
-		Line:   1,
+		Line:   line,
 		Lexeme: lexeme,
 		Token:  token,
 		Type:   typ,
@@ -80,10 +101,15 @@ func addSymbol(typ string, token string, lexeme string, params map[string]string
 	}
 }
 
+/**
+ * Function to retrieve a symbol from the current scope
+ * Checks the current scope and its parent scopes
+ * If the symbol is not found, it returns an empty SymbolTableEntry
+ */
 func retrieveIdentifier(identifier string) SymbolTableEntry {
 	current := currentScope()
 	if current == nil {
-		fmt.Println("ERROR: No active scope when retrieving identifier", identifier)
+		fmt.Fprintln(semanticErrorFile, "ERROR: No active scope when retrieving identifier", identifier)
 		return SymbolTableEntry{}
 	}
 
@@ -95,13 +121,15 @@ func retrieveIdentifier(identifier string) SymbolTableEntry {
 		}
 	}
 	if !found {
-		fmt.Println("ERROR: Undeclared variable", identifier)
+		fmt.Fprintf(semanticErrorFile, "ERROR: Undeclared variable '%s'\n", identifier)
 		return SymbolTableEntry{}
 	}
 	return current.Entries[identifier]
 }
 
-// Gets the first type in the children
+/**
+ * Traverses children to find the type of a variable
+ */
 func getVarType(node *ASTnode) string {
 	if node == nil {
 		return ""
@@ -129,7 +157,11 @@ func getVarType(node *ASTnode) string {
 
 }
 
-// Sets to double if any doubles or /, otherwise int
+/**
+ * Retrieves the type of an expression
+ * Upgrades type to double if expression contains a double
+ * or if the expression includes a division operator
+ */
 func getExprType(node *ASTnode) string {
 	if node == nil {
 		return ""
@@ -155,9 +187,11 @@ func getExprType(node *ASTnode) string {
 	return "int"
 }
 
-// Helper function to check type compatibility
+/**
+ * Checks if two types are compatible
+ * Allows double to be assigned to int
+ */
 func isTypeCompatible(type1 string, type2 string) bool {
-	fmt.Println("type1", type1, "type2", type2)
 	if type1 == type2 {
 		return true
 	}
@@ -167,24 +201,64 @@ func isTypeCompatible(type1 string, type2 string) bool {
 	return false
 }
 
-func WalkAST(node *ASTnode) {
+/**
+ * Builds the symbol tables for the AST
+ * Checks for:
+ * 	- Redeclarations errors
+ * 	- Undeclared variable reference errors
+ * 	- Variable assignment type errors
+ * 	- Function arguments type errors
+ * 	- Function return type errors
+ * 	- Upgrades integers to doubles during comparison
+ * 	  operation so all comparisons are type valid
+ */
+func BuildSymbolTables(node *ASTnode) {
 	// Initialize scope stack if empty
 	if len(scopeStack) == 0 {
 		pushScope()
 	}
 
+	// Base case
 	if node == nil {
 		return
 	}
 
-	// New scope for blocks (def, if, while)
-	if node.Type == "KEYWORD" && (node.Lexeme == "if" || node.Lexeme == "else" || node.Lexeme == "while" || node.Lexeme == "def") {
-		pushScope()
+	// Handle scopes and keywords
+	if node.Type == "KEYWORD" {
+		addSymbol("keyword", "KEYWORD", node.Lexeme, nil, node.Line)
+
+		// New scope for if, else, and while blocks
+		if node.Lexeme == "if" || node.Lexeme == "while" {
+			pushScope()
+		}
+		if node.Lexeme == "else" {
+			popScope()  // close the then block
+			pushScope() // open a fresh scope for else
+		}
+		if node.Lexeme == "fi" || node.Lexeme == "od" {
+			popScope() // close the if or while block
+		}
+		// Reset current function, current return type, and pop scope when exiting function body
+		if node.Lexeme == "fed" {
+			currentFunctionReturnType = ""
+			currentFunction = nil
+			popScope()
+		}
 	}
 
-	// Track function return type and parameters when entering a function definition
+	// Add literals to symbol table
+	if node.Type == "INTEGER" || node.Type == "DOUBLE" {
+		typ := "int"
+		if node.Type == "DOUBLE" {
+			typ = "double"
+		}
+		addSymbol(typ,
+			node.Type,
+			node.Lexeme, nil, node.Line)
+	}
+
+	// Updated to ensure function declarations and parameters are in separate scopes
 	if node.Symbol == "fdec" {
-		// The return type is the first child after 'def'
 		currentFunctionReturnType = node.Children[1].Children[0].Lexeme
 		currentFunction = &FunctionInfo{
 			ReturnType: currentFunctionReturnType,
@@ -193,40 +267,43 @@ func WalkAST(node *ASTnode) {
 
 		funcName := node.Children[2].Children[0].Lexeme
 
+		// Add function declaration to the current (top-level) scope
+		addSymbol(currentFunctionReturnType, "IDENTIFIER", funcName, currentFunction.Parameters, node.Line)
+
+		// Create a new scope for the function body
+		pushScope()
+
 		paramsNode := node.Children[4]
 
-		// Recursively process params
+		// Recursively process parameters
 		var processParams func(*ASTnode)
 		processParams = func(pNode *ASTnode) {
+			// Base case
 			if pNode == nil || len(pNode.Children) < 3 {
 				return
 			}
 
 			// Extract type
-			typeNode := pNode.Children[0]            // type
-			paramType := typeNode.Children[0].Lexeme // int / double
+			typeNode := pNode.Children[0]
+			paramType := typeNode.Children[0].Lexeme
 
 			// Extract identifier
-			idNode := pNode.Children[1].Children[0] // id
-			paramName := idNode.Children[0].Lexeme  // IDENTIFIER
+			idNode := pNode.Children[1].Children[0]
+			paramName := idNode.Children[0].Lexeme
 
-			// Add to symbol table and function param list
+			// Add parameter to the function's scope
 			currentFunction.Parameters[paramName] = paramType
-			addSymbol(paramType, "IDENTIFIER", paramName, nil)
+			addSymbol(paramType, "IDENTIFIER", paramName, nil, node.Line)
 
-			// Recurse into params'
+			// Recurse into params prime
 			if len(pNode.Children) > 2 {
 				paramsPrime := pNode.Children[2]
 				if len(paramsPrime.Children) > 1 {
-					// The second child is the next `params`
 					processParams(&paramsPrime.Children[1])
 				}
 			}
 		}
-
 		processParams(&paramsNode)
-		addSymbol(currentFunctionReturnType, "IDENTIFIER", funcName, currentFunction.Parameters)
-
 	}
 
 	// Start of a declaration
@@ -239,41 +316,36 @@ func WalkAST(node *ASTnode) {
 		currentType = node.Children[0].Lexeme
 	}
 
-	// Handle identifiers
+	// Handle identifier declarations if in declaration context
 	if node.Symbol == "IDENTIFIER" {
 		if inDeclContext {
-			addSymbol(currentType, node.Symbol, node.Lexeme, nil) // declaration
+			addSymbol(currentType, node.Symbol, node.Lexeme, nil, node.Line)
 			fmt.Printf("Declared %s as %s\n", node.Lexeme, currentType)
 		} else {
-			// Check if it's a function call
-			if len(node.Children) > 0 && node.Children[0].Symbol == "(" { // will never happen
-				// This is a function call, we'll handle it in the function call section
-				entry := retrieveIdentifier(node.Lexeme)
-				if entry.Type == "" {
-					fmt.Printf("Error: Undeclared function '%s'\n", node.Lexeme)
-				}
-			}
+			// Check if variable is declared
+			retrieveIdentifier(node.Lexeme)
 		}
 	}
 
 	if node.Symbol == "factor" {
-		if len(node.Children) <= 1 {
+		if len(node.Children) == 1 {
+			BuildSymbolTables(&node.Children[0])
 			return
 		}
 
 		id := node.Children[0]
 		factorPrime := node.Children[1]
 
-		// Check if it's a function call
+		// Check for function call
 		if id.Symbol == "id" && len(factorPrime.Children) > 0 && factorPrime.Children[0].Lexeme == "(" {
-			funcName := id.Children[0].Lexeme // Extract IDENTIFIER from id
+			funcName := id.Children[0].Lexeme
 			funcEntry := retrieveIdentifier(funcName)
 			if funcEntry.Type == "" {
-				fmt.Printf("Error: Undeclared function '%s'\n", funcName)
+				fmt.Fprintf(semanticErrorFile, "Error: Undeclared function '%s'\n", funcName)
 				return
 			}
 
-			// Get declared parameter types
+			// Retrieve parameter types from function entry
 			paramTypes := []string{}
 			if funcEntry.Params != nil {
 				for _, typ := range funcEntry.Params {
@@ -290,148 +362,95 @@ func WalkAST(node *ASTnode) {
 				if node.Symbol == "exprseq" && len(node.Children) > 0 {
 					argTypes = append(argTypes, getExprType(&node.Children[0]))
 					if len(node.Children) > 1 {
-						collectExprTypes(&node.Children[1]) // exprseq'
+						collectExprTypes(&node.Children[1])
 					}
 				} else if node.Symbol == "exprseq'" && len(node.Children) > 1 {
 					collectExprTypes(&node.Children[1])
 				}
 			}
-
 			collectExprTypes(&exprseq)
 
-			// Check number of arguments
+			// Check for correct number of arguments
 			if len(argTypes) != len(paramTypes) {
-				fmt.Printf("Error: Function '%s' expects %d arguments but got %d\n", funcName, len(paramTypes), len(argTypes))
+				fmt.Fprintf(semanticErrorFile, "Error: Function '%s' expects %d arguments but got %d\n", funcName, len(paramTypes), len(argTypes))
 				return
 			}
 
-			// Check argument types
+			// Validate argument types match parameter types
 			for i := range argTypes {
 				if !isTypeCompatible(paramTypes[i], argTypes[i]) {
-					fmt.Printf("Type Error: Argument %d to function '%s' expects type '%s' but got '%s'\n", i+1, funcName, paramTypes[i], argTypes[i])
+					fmt.Fprintf(semanticErrorFile, "Type Error: Argument %d to function '%s' expects type '%s' but got '%s'\n", i+1, funcName, paramTypes[i], argTypes[i])
 				}
 			}
 		}
 	}
 
-	// Handle assignments
+	// Handle variable assignments
 	if node.Symbol == "statement" && len(node.Children) > 1 && node.Children[1].Symbol == "=" {
 		varType := getVarType(&node.Children[0])
 		exprType := getExprType(&node.Children[2])
+		// Check compatability between LHS and RHS
 		if !isTypeCompatible(varType, exprType) {
-			fmt.Printf("Type Error: Cannot assign %s to variable of type %s\n", exprType, varType)
+			fmt.Fprintf(semanticErrorFile, "Type Error: Cannot assign %s to variable of type %s\n", exprType, varType)
 		}
 	}
-
-	// TODO: I don't think they could ever be invalid for comparison. Just implicitly promote ints to doubles
-	// Handle comparisons
-	// if node.Symbol == "bfactor" && len(node.Children) > 0 && node.Children[0].Symbol == "(" {
-	// 	leftType := getExprType(&node.Children[1])
-	// 	rightType := getExprType(&node.Children[3])
-	// 	if !isTypeCompatible(leftType, rightType) {
-	// 		fmt.Printf("Type Error: Cannot compare %s with %s\n", leftType, rightType)
-	// 	}
-	// }
 
 	// Handle return statements
 	if node.Symbol == "statement" && len(node.Children) > 0 && node.Children[0].Symbol == "return" {
 		if currentFunctionReturnType == "" {
-			fmt.Println("Error: Return statement outside of function")
+			fmt.Fprintln(semanticErrorFile, "Error: Return statement outside of function")
 			return
 		}
 		returnType := getExprType(&node.Children[1])
+		// Check compatibility between return type and function return type
 		if !isTypeCompatible(currentFunctionReturnType, returnType) {
-			fmt.Printf("Type Error: Function declared to return %s but returning %s\n",
+			fmt.Fprintf(semanticErrorFile, "Type Error: Function declared to return %s but returning %s\n",
 				currentFunctionReturnType, returnType)
 		}
 	}
 
-	// Visit children
+	// Recurse AST
 	for i := range node.Children {
-		WalkAST(&node.Children[i])
+		BuildSymbolTables(&node.Children[i])
 	}
 
-	// End of decl subtree
+	// End of declaration subtree
 	if node.Symbol == "decl" {
 		inDeclContext = false
 		currentType = ""
 	}
 
-	// Reset function return type when exiting function definition
-	if node.Type == "KEYWORD" && node.Lexeme == "fed" {
-		currentFunctionReturnType = ""
-		currentFunction = nil
-		popScope() // Exit the current scope
-	}
-
-	if node.Type == "KEYWORD" && (node.Lexeme == "fi" || node.Lexeme == "od") {
-		popScope() // Exit the current scope
-	}
 }
 
-// VisualizeAST prints a text-based representation of the AST with improved formatting
-func VisualizeAST(root *ASTnode) {
-	fmt.Println("\n=== Abstract Syntax Tree Visualization ===\n")
-	visualizeNode(root, "", true)
-	fmt.Println("\n=========================================\n")
-}
-
-// visualizeNode is a recursive helper function for VisualizeAST
-func visualizeNode(node *ASTnode, prefix string, isLast bool) {
-	if node == nil {
-		return
-	}
-
-	// Create the tree-like structure
-	marker := "└── "
-	if !isLast {
-		marker = "├── "
-	}
-
-	// Print the current node with appropriate formatting
-	nodeInfo := fmt.Sprintf("%s%s%s", prefix, marker, node.Symbol)
-
-	// Add additional node information with colors
-	details := []string{}
-	if node.Lexeme != "" {
-		details = append(details, color.GreenString("lexeme=%s", node.Lexeme))
-	}
-	if node.Type != "" {
-		details = append(details, color.BlueString("type=%s", node.Type))
-	}
-
-	if len(details) > 0 {
-		nodeInfo += " (" + strings.Join(details, ", ") + ")"
-	}
-
-	fmt.Println(nodeInfo)
-
-	// Calculate the prefix for child nodes
-	childPrefix := prefix
-	if isLast {
-		childPrefix += "    "
-	} else {
-		childPrefix += "│   "
-	}
-
-	// Recursively visualize children
-	for i, child := range node.Children {
-		isLastChild := i == len(node.Children)-1
-		visualizeNode(&child, childPrefix, isLastChild)
-	}
-}
-
-// PrintSymbolTable prints the current symbol table in a formatted way
+/**
+ * Visualizes the symbol table in a text file
+ */
 func PrintSymbolTable() {
 	if len(allScopes) == 0 {
 		fmt.Println("No symbol tables available")
 		return
 	}
 
-	fmt.Println("\n=== Symbol Table Hierarchy ===\n")
+	file, err := os.Create("semantic/symbol_tables.txt")
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+	defer file.Close()
 
-	// Track visited scopes to prevent infinite loops
 	visited := make(map[*SymbolTable]bool)
+
+	formatParams := func(params map[string]string) string {
+		if len(params) == 0 {
+			return "[]"
+		}
+		result := "["
+		for name, typ := range params {
+			result += fmt.Sprintf("%s: %s, ", name, typ)
+		}
+		result = strings.TrimSuffix(result, ", ") + "]"
+		return result
+	}
 
 	var printScope func(scope *SymbolTable, level int)
 	printScope = func(scope *SymbolTable, level int) {
@@ -441,31 +460,18 @@ func PrintSymbolTable() {
 		visited[scope] = true
 
 		indent := strings.Repeat("  ", level)
-		fmt.Printf("%sScope Level %d:\n", indent, level)
-
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"Identifier", "Type", "Token", "Line", "Params"})
+		fmt.Fprintf(file, "%s+-----------------------------+----------------+------------+------+------------------------------+\n", indent)
+		fmt.Fprintf(file, "%s| Scope Level %d               |\n", indent, level)
+		fmt.Fprintf(file, "%s+-----------------------------+----------------+------------+------+------------------------------+\n", indent)
+		fmt.Fprintf(file, "%s| Lexeme                      | Type           | Token      | Line | Params                       |\n", indent)
+		fmt.Fprintf(file, "%s+-----------------------------+----------------+------------+------+------------------------------+\n", indent)
 
 		for name, entry := range scope.Entries {
-			table.Append([]string{
-				color.GreenString(name),
-				color.BlueString(entry.Type),
-				entry.Token,
-				fmt.Sprintf("%d", entry.Line),
-				fmt.Sprintf("%v", entry.Params),
-			})
+			fmt.Fprintf(file, "%s| %-27s | %-14s | %-10s | %-4d | %-28s |\n",
+				indent, name, entry.Type, entry.Token, entry.Line, formatParams(entry.Params))
 		}
+		fmt.Fprintf(file, "%s+-----------------------------+----------------+------------+------+------------------------------+\n\n", indent)
 
-		table.SetAutoFormatHeaders(false)
-		table.SetBorder(false)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
-		table.SetColumnSeparator("|")
-		table.SetHeaderLine(false)
-
-		table.Render()
-		fmt.Println()
-
-		// Recursively print child scopes
 		for _, child := range allScopes {
 			if child.Parent == scope {
 				printScope(child, level+1)
@@ -473,7 +479,6 @@ func PrintSymbolTable() {
 		}
 	}
 
-	// Print all top-level scopes
 	for _, scope := range allScopes {
 		if scope.Parent == nil {
 			printScope(scope, 0)
@@ -482,6 +487,13 @@ func PrintSymbolTable() {
 }
 
 func SemanticAnalysis(root *ASTnode) {
-	WalkAST(root)
+	var err error
+
+	semanticErrorFile, err = os.Create("semantic/semantic_errors.txt")
+	if err != nil {
+		log.Fatal("Error creating error file:", err)
+	}
+	BuildSymbolTables(root)
 	PrintSymbolTable()
+	defer semanticErrorFile.Close()
 }
