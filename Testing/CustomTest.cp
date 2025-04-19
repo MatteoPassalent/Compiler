@@ -9,6 +9,4 @@ double c;
 c = function(1.1, 2.2);
 if (c >= 4) then
     print e;
-fi
-
-.
+fi;.

@@ -1,0 +1,62 @@
+B main  
+gcd:   
+Begin   
+Push {LR}  
+Push {FP}  
+ADD a {FP} 8
+ADD b {FP} 12
+CMP a b 
+BEQ L1  
+B L2  
+L1:   
+MOV {fp - 4} a 
+B gcdExit  
+L2:   
+CMP a b 
+BGT L3  
+B L4  
+L3:   
+SUB t1 a b
+PUSH t1  
+PUSH b  
+BL gcd t2 
+POP b  
+POP t1  
+MOV {fp - 4} t2 
+B gcdExit  
+L4:   
+SUB t3 b a
+PUSH a  
+PUSH t3  
+BL gcd t4 
+POP t3  
+POP a  
+MOV {fp - 4} t4 
+B gcdExit  
+gcdExit:   
+POP {FP}  
+POP {PC}  
+main:   
+Begin   
+MOV 21 t5 
+MOV 15 t6 
+PUSH t5  
+PUSH t6  
+BL gcd t7 
+POP t6  
+POP t5  
+PRINT t7  
+MOV 45 t8 
+PRINT t8  
+MOV 2 t9 
+MOV 21 t10 
+MOV 28 t11 
+PUSH t10  
+PUSH t11  
+BL gcd t12 
+POP t11  
+POP t10  
+MOV 6 t13 
+ADD t14 t12 t13
+MUL t15 t9 t14
+PRINT t15  

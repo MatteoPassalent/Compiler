@@ -3,188 +3,163 @@ package codegen
 import (
 	"Compiler/parser"
 	"fmt"
+	"os"
 )
 
-// We can define a structure to hold a single 3-address (or similar) instruction.
+type ASTnode = parser.ASTnode
+
 type TACInstruction struct {
-	// For simplicity, store each instruction in a single string or in fields
-	Op   string // the operation, e.g., "ADD", "SUB", "MUL", "CALL", etc.
+	Op   string // "ADD", "SUB", "MUL", "CALL", etc
 	Arg1 string
 	Arg2 string
 	Arg3 string
 }
 
-// We'll store the generated instructions in a list.
-var instructions []TACInstruction
-
-// For naming temporaries & labels
 var tempCount int
 var labelCount int
+var file *os.File
 
-// For tracking the current function name
 var currentFunctionName string
 
-// MakeTemp generates a new temporary variable name.
+// Creates new temporary variable names
 func MakeTemp() string {
 	tempCount++
 	return fmt.Sprintf("t%d", tempCount)
 }
 
-// MakeLabel generates a new label name.
-func MakeLabel(prefix string) string {
+// Creates new label names
+func MakeLabel() string {
 	labelCount++
-	return fmt.Sprintf("%s%d", prefix, labelCount)
+	return fmt.Sprintf("L%d", labelCount)
 }
 
-// Emit appends a new instruction to our 3TAC instruction list.
-func Emit(op, arg1, arg2, dest string) {
-	instructions = append(instructions, TACInstruction{op, arg1, arg2, dest})
+// Appends new 3TAC instructions
+func Emit(op, arg1, arg2, arg3 string) {
+	fmt.Fprintln(file, op, arg1, arg2, arg3)
 }
 
-// GenerateCode is the main entry point for the code generator.
-// It returns a list of generated 3TAC instructions.
-func GenerateCode(ast *parser.ASTnode) []TACInstruction {
-	instructions = []TACInstruction{}
+// Generate 3TAC code
+func GenerateTAC(astRoot *ASTnode) {
+	var err error
+	file, err = os.Create("codegen/IR_code.txt")
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
 	tempCount = 0
 	labelCount = 0
-
-	// Begin code gen from the root of the AST
-	genProgram(ast)
-	for _, instruction := range instructions {
-		fmt.Printf("%s %s %s %s\n", instruction.Op, instruction.Arg1, instruction.Arg2, instruction.Arg3)
-	}
-	return instructions
+	genProgram(astRoot)
+	defer file.Close()
 }
 
-// genProgram handles the top-level "program" node
-// You can adapt based on how your root AST is structured.
-func genProgram(node *parser.ASTnode) {
-	// Typically, you might have children representing fdecls, declarations, statement_seq, etc.
-	// We just walk them in order:
+// Handles functions and main program statements
+func genProgram(node *ASTnode) {
 	Emit("B", "main", "", "")
-
 	for _, child := range node.Children {
 		switch child.Symbol {
 		case "fdecls", "fdecls'":
 			genFdecls(&child)
-		case "declarations", "declarations'":
-			// Possibly global declarations, etc.
-			// (Often you might not generate code for these, just store them in the symbol table.)
 		case "statement_seq":
-			// The "main" portion or top-level statements
 			Emit("main:", "", "", "")
+			Emit("Begin", "", "", "")
 			genStatementSeq(&child)
 		}
 	}
 }
 
-// genFdecls walks a list of function declarations
-func genFdecls(node *parser.ASTnode) {
+// Handles function declarations
+func genFdecls(node *ASTnode) {
 	for _, child := range node.Children {
 		if child.Symbol == "fdec" {
 			genFdec(&child)
 		} else if child.Symbol == "fdecls'" {
-			// Or if child is fdecls' again, call genFdecls recursively
 			genFdecls(&child)
 		}
 	}
 }
 
-// genFdec handles a single function definition: def type id (params) declarations statement_seq fed
-func genFdec(node *parser.ASTnode) {
-	// child layout may differ in your AST
-	// e.g. node.Children[0] = "def", node.Children[1] = type, node.Children[2] = id, etc.
-	// Adjust indexing as needed.
+// Handles a single function declaration
+func genFdec(node *ASTnode) {
 
 	funcNameNode := node.Children[2] //  "id"
 	funcName := funcNameNode.Children[0].Lexeme
 
 	currentFunctionName = funcName
-	// Make a label for the function
-	Emit(fmt.Sprintf("%s:", funcName), "", "", "") // e.g. "gcd:"
-	Emit("Begin", "", "", "")                      // Could push {LR}, push {FP}, etc.
-	Emit("Push", "{LR}", "", "")                   // Save the old link register
-	Emit("Push", "{FP}", "", "")                   // Save the old frame pointer
+
+	// function start
+	Emit(fmt.Sprintf("%s:", funcName), "", "", "")
+	Emit("Begin", "", "", "")
+	Emit("Push", "{LR}", "", "") // Push the link register
+	Emit("Push", "{FP}", "", "") // Push the frame pointer
 
 	fpCounter := 4
-	// Possibly handle the declarations child (locals) or do nothing if you store them in a table
 
 	paramsNode := node.Children[4]
-	var processParams func(*parser.ASTnode)
-	processParams = func(pNode *parser.ASTnode) {
+
+	var processParams func(*ASTnode)
+	processParams = func(pNode *ASTnode) {
 		if pNode == nil || len(pNode.Children) < 3 {
 			return
 		}
 
-		// Extract identifier
 		idNode := pNode.Children[1].Children[0] // id
 		paramName := idNode.Children[0].Lexeme  // IDENTIFIER
 
 		fpCounter += 4
-		Emit("ADD", paramName, "{FP}", fmt.Sprintf("%d", fpCounter)) // e.g. "ADD {FP}, 4, paramName"
+		Emit("ADD", paramName, "{FP}", fmt.Sprintf("%d", fpCounter)) // Retrieve parameter
 
 		// Recurse into params'
 		if len(pNode.Children) > 2 {
 			paramsPrime := pNode.Children[2]
 			if len(paramsPrime.Children) > 1 {
-				// The second child is the next `params`
 				processParams(&paramsPrime.Children[1])
 			}
 		}
 	}
-
 	processParams(&paramsNode)
-	// Now handle the statements inside this function
+
+	// Handle function body
 	for _, child := range node.Children {
 		switch child.Symbol {
 		case "statement_seq":
 			genStatementSeq(&child)
 		}
 	}
-
-	Emit(currentFunctionName+"Exit:", "", "", "") // Label for the exit point
-	Emit("Pop", "{FP}", "", "")                   // Restore the old frame pointer
-	Emit("Pop", "{PC}", "", "")                   // Restore the old link register
+	Emit(funcName+"Exit:", "", "", "")
+	Emit("POP", "{FP}", "", "")
+	Emit("POP", "{PC}", "", "")
 	currentFunctionName = ""
 }
 
-func genStatementSeq(node *parser.ASTnode) {
-	// Safety checks
+// Handles sequence of statements
+func genStatementSeq(node *ASTnode) {
 	if node == nil || node.Symbol != "statement_seq" {
 		return
 	}
-	// Grammar: statement_seq -> statement statement_seq'
-	// child[0] = statement
-	// child[1] = statement_seq'
 	if len(node.Children) == 0 {
 		return
 	}
 
-	// 1) Generate code for the first statement
+	// Generate instructions for first statement
 	statementNode := &node.Children[0]
 	genStatement(statementNode)
 
-	// 2) If there's a second child, it should be statement_seq'
+	// Handle subsequent statements
 	if len(node.Children) > 1 {
 		statementSeqPrime := &node.Children[1]
 		genStatementSeqPrime(statementSeqPrime)
 	}
 }
 
-func genStatementSeqPrime(node *parser.ASTnode) {
-	// Grammar: statement_seq' -> ; statement_seq | ε
-	// If it's empty, node.Children might be 0.
+// Handles additional statements in a sequence
+func genStatementSeqPrime(node *ASTnode) {
 	if node == nil || node.Symbol != "statement_seq'" {
 		return
 	}
 	if len(node.Children) == 0 {
-		// It's epsilon (empty)
 		return
 	}
 
-	// If not empty, then:
-	// child[0] = ";" punctuation
-	// child[1] = statement_seq
 	semicolonNode := &node.Children[0]
 	if semicolonNode.Lexeme == ";" {
 		statementSeqNode := &node.Children[1]
@@ -192,101 +167,83 @@ func genStatementSeqPrime(node *parser.ASTnode) {
 	}
 }
 
-// genStatement handles a single statement node
-func genStatement(node *parser.ASTnode) {
-	// Your AST might store statements in different ways. The gist:
-	// 1) if it's an assignment: var = expr
-	// 2) if it's if bexpr then statement_seq statement'
-	// 3) if it's while ...
-	// 4) if it's print ...
-	// 5) if it's return ...
-	// etc.
-
-	// This is a simplified demonstration. Adjust to your actual node structure.
-
-	// Check the first child or the structure to see which statement it is.
+// Handles a signle statement
+func genStatement(node *ASTnode) {
 	if len(node.Children) == 0 {
-		// Empty statement
 		return
 	}
-
-	// For example, detect assignment: statement -> var = expr
+	// Handle assignment statement
 	if len(node.Children) >= 3 && node.Children[1].Symbol == "=" {
-		// var = expr
 		varNode := &node.Children[0]
 		exprNode := &node.Children[2]
 
-		// Generate code for the expression
+		// Generate instructions for the expression
 		exprResult := genExpr(exprNode)
 
-		// The varNode might be something like var -> id or var -> id [ expr ]
-		// We'll keep it simple: if it's just an identifier
+		// Get the variable name
 		varName := getVarName(varNode)
+
+		// Final assignment instruction
 		Emit("MOV", exprResult, varName, "")
 		return
 	}
 
-	// Possibly an "if" statement
+	// Handle if statement
 	if node.Children[0].Symbol == "if" {
-		// if bexpr then statement_seq statement'
 		bexprNode := &node.Children[1]
-		trueSeqNode := &node.Children[3] // statement_seq
-		// statement' might contain else or fi
+		trueSeqNode := &node.Children[3]
 
 		elseOrFiNode := &node.Children[4]
 
-		// labelElse := MakeLabel("Lelse")
-		// labelEnd := MakeLabel("LendIf")
-		labelTrue := MakeLabel("L")
-		labelFalse := MakeLabel("L")
+		labelTrue := MakeLabel()
+		labelFalse := MakeLabel()
 
-		// Generate boolean expression code
+		// Generate instructions for bool expression
 		condResult := genBexpr(bexprNode)
-		// We can generate a jump-if-false:
-		// In typical 3AC, you might do: if condResult == 0 goto labelElse
+
+		// Add conditional branch jump instruction
 		Emit("B"+condResult, labelTrue, "", "")
-		Emit("B", labelFalse, "", "") // Jump to false block
-		// Emit("IF_FALSE_GOTO", condResult, "", labelElse)
+		// Branch to false block if condition is false
+		Emit("B", labelFalse, "", "")
 
 		// True block
 		Emit(labelTrue+":", "", "", "")
 		genStatementSeq(trueSeqNode)
 
-		// Jump to end
-		// Emit("GOTO", labelEnd, "", "")
-
-		// Else part
-		// Emit("", "", "", labelElse+":")
-		// Could be "else statement_seq fi" or just "fi"
+		// False block
 		Emit(labelFalse+":", "", "", "")
 		genElsePart(elseOrFiNode)
-		// Emit("", "", "", labelEnd+":")
 		return
 	}
 
-	// Possibly a "while" statement
+	// Handle while statement
 	if node.Children[0].Symbol == "while" {
 		condNode := &node.Children[1]
 		bodyNode := &node.Children[3]
 
-		loopLabel := MakeLabel("L")
-		bodyLabel := MakeLabel("L")
-		exitLabel := MakeLabel("L")
+		loopLabel := MakeLabel()
+		bodyLabel := MakeLabel()
+		exitLabel := MakeLabel()
 
-		Emit(loopLabel+":", "", "", "") // Loop start
+		// Loop start
+		Emit(loopLabel+":", "", "", "")
+		// Generate instructions for the condition
 		condResult := genBexpr(condNode)
 
 		Emit("B"+condResult, bodyLabel, "", "") // Jump to body if true
 		Emit("B", exitLabel, "", "")            // Jump to exit if false
-		Emit(bodyLabel+":", "", "", "")         // Body start
+
+		// While body
+		Emit(bodyLabel+":", "", "", "")
 		genStatementSeq(bodyNode)
-		Emit("B", loopLabel, "", "")    // Jump back to loop start
+		Emit("B", loopLabel, "", "") // Jump back to loop start
+
 		Emit(exitLabel+":", "", "", "") // Exit label
 
 		return
 	}
 
-	// Possibly a "print expr"
+	// Handle print statement
 	if node.Children[0].Symbol == "print" {
 		exprNode := &node.Children[1]
 		exprResult := genExpr(exprNode)
@@ -294,66 +251,56 @@ func genStatement(node *parser.ASTnode) {
 		return
 	}
 
-	// Possibly a "return expr"
+	// Handle return statement
 	if node.Children[0].Symbol == "return" {
 		exprNode := &node.Children[1]
 		exprResult := genExpr(exprNode)
-		// We just store it in a hidden location or a standard place:
-		Emit("MOV", "{fp - 4}", exprResult, "")
-		Emit("B", currentFunctionName+"Exit", "", "") // Return to caller
+		Emit("MOV", "{fp - 4}", exprResult, "")       // Store return value
+		Emit("B", currentFunctionName+"Exit", "", "") // Jump to function exit
 		return
 	}
-
-	// ... handle other statement forms ...
 }
 
-// genElsePart tries to figure out if there's an "else" in statement'
-func genElsePart(node *parser.ASTnode) {
-	// statement' -> fi OR else statement_seq fi
-	// If no children or the first child is "fi", there's no else
+// Generates statement instructions for else part of an if statement OR fi
+func genElsePart(node *ASTnode) {
 	if len(node.Children) > 0 && node.Children[0].Symbol == "else" {
-		seqNode := &node.Children[1] // statement_seq
+		seqNode := &node.Children[1]
 		genStatementSeq(seqNode)
 	}
 }
 
-func genBexpr(node *parser.ASTnode) string {
-	// bexpr → bterm bexpr'
+// Generates instructions for boolean expressions
+func genBexpr(node *ASTnode) string {
 	if node == nil || node.Symbol != "bexpr" || len(node.Children) == 0 {
 		return ""
 	}
 
-	left := genBterm(&node.Children[0]) // first bterm
+	left := genBterm(&node.Children[0])
 
-	if len(node.Children) == 1 { // ε
+	if len(node.Children) == 1 {
 		return left
 	}
 	return genBexprPrime(&node.Children[1], left)
 }
 
-// bexpr' → or bterm bexpr' | ε
-func genBexprPrime(node *parser.ASTnode, leftTmp string) string {
+func genBexprPrime(node *ASTnode, leftTmp string) string {
 	if node == nil || len(node.Children) == 0 {
 		return leftTmp // ε
 	}
 
-	// child[0]  = 'or'
-	// child[1]  = bterm
-	// child[2]  = bexpr'
-	// opNode := node.Children[0] // keyword "or"
 	rightTmp := genBterm(&node.Children[1])
 
 	out := MakeTemp()
-	Emit("OR", leftTmp, rightTmp, out) // out = leftTmp OR rightTmp
+	Emit("OR", leftTmp, rightTmp, out)
 
-	if len(node.Children) > 2 { // still more ors
+	if len(node.Children) > 2 {
 		return genBexprPrime(&node.Children[2], out)
 	}
 	return out
 }
 
-// bterm → bfactor bterm'
-func genBterm(node *parser.ASTnode) string {
+// Generates instructions for boolean terms
+func genBterm(node *ASTnode) string {
 	if node == nil || node.Symbol != "bterm" || len(node.Children) == 0 {
 		return ""
 	}
@@ -365,18 +312,15 @@ func genBterm(node *parser.ASTnode) string {
 	return genBtermPrime(&node.Children[1], left)
 }
 
-// bterm' → and bfactor bterm' | ε
-func genBtermPrime(node *parser.ASTnode, leftTmp string) string {
+func genBtermPrime(node *ASTnode, leftTmp string) string {
 	if node == nil || len(node.Children) == 0 {
 		return leftTmp
 	}
 
-	// child[0] = 'and'
-	// child[1] = bfactor
 	rightTmp := genBfactor(&node.Children[1])
 
 	out := MakeTemp()
-	Emit("AND", leftTmp, rightTmp, out) // out = leftTmp AND rightTmp
+	Emit("AND", leftTmp, rightTmp, out)
 
 	if len(node.Children) > 2 {
 		return genBtermPrime(&node.Children[2], out)
@@ -384,15 +328,12 @@ func genBtermPrime(node *parser.ASTnode, leftTmp string) string {
 	return out
 }
 
-// bfactor → not bfactor
-//
-//	| ( expr comp expr )
-func genBfactor(node *parser.ASTnode) string {
+// Generates instructions for boolean factors
+func genBfactor(node *ASTnode) string {
 	if node == nil || node.Symbol != "bfactor" {
 		return ""
 	}
 
-	// Case 1: 'not' bfactor
 	if node.Children[0].Symbol == "not" {
 		sub := genBfactor(&node.Children[1])
 		out := MakeTemp()
@@ -400,20 +341,13 @@ func genBfactor(node *parser.ASTnode) string {
 		return out
 	}
 
-	// Case 2: ( expr comp expr )
-	// Layout (see sample tree):
-	// child[0] = '('
-	// child[1] = expr
-	// child[2] = comp
-	// child[3] = expr
-	// child[4] = ')'
 	if len(node.Children) >= 5 && node.Children[0].Lexeme == "(" {
 		left := genExpr(&node.Children[1])
-		opTmp := node.Children[2] // comp node
+		opTmp := node.Children[2]
 		right := genExpr(&node.Children[3])
 
 		// Extract actual comparison operator symbol:
-		compTok := opTmp.Children[0].Lexeme // <  >  ==  <= ...
+		compTok := opTmp.Children[0].Lexeme
 		if compTok == "<" {
 			compTok = "LT"
 		} else if compTok == ">" {
@@ -428,63 +362,43 @@ func genBfactor(node *parser.ASTnode) string {
 			compTok = "NE"
 		}
 
-		Emit("CMP", left, right, "") // out = (left compTok right) ?1:0
+		Emit("CMP", left, right, "")
 		return compTok
 	}
-
-	// If grammar later adds literals/identifiers in bfactor, handle here.
 	return ""
 }
 
-func genExpr(node *parser.ASTnode) string {
-	// node should be: expr -> term expr'
-	// child[0] is the 'term'
-	// child[1] is the 'expr' (or 'expr' prime) part
+// Generates instructions for expressions
+func genExpr(node *ASTnode) string {
 	if len(node.Children) == 2 && node.Symbol == "expr" {
-		// Generate code for the term
 		leftTemp := genTerm(&node.Children[0])
-		// Now handle expr'
 		return genExprPrime(&node.Children[1], leftTemp)
 	}
 
-	// Fallback if your AST is slightly different or if it's just a single child
 	if len(node.Children) == 1 {
 		return genExpr(&node.Children[0])
 	}
-
 	return ""
 }
 
-func genExprPrime(node *parser.ASTnode, leftTemp string) string {
-	// node should be expr' -> + term expr'
-	//                   or -> - term expr'
-	//                   or -> ε  (empty)
-
-	// If expr' is empty (epsilon), just return leftTemp
-	// Typically, an empty node might have 0 children or a special symbol.
+// Generate add and subtraction instructions
+func genExprPrime(node *ASTnode, leftTemp string) string {
 	if len(node.Children) == 0 {
 		return leftTemp
 	}
 
-	// If we do have children, they might be:
-	// child[0] = '+' or '-'
-	// child[1] = 'term'
-	// child[2] = 'expr' (prime again)
 	op := node.Children[0].Symbol
 	termNode := &node.Children[1]
 	rightTemp := genTerm(termNode)
 
-	// Now create a new temp to combine leftTemp op rightTemp
 	newTemp := MakeTemp()
 	switch op {
 	case "+":
 		Emit("ADD", newTemp, leftTemp, rightTemp)
 	case "-":
 		Emit("SUB", newTemp, leftTemp, rightTemp)
-		// If your grammar includes more operators at expr' level, handle them
 	}
 
-	// Recurse on the remaining expr'
 	if len(node.Children) > 2 {
 		return genExprPrime(&node.Children[2], newTemp)
 	}
@@ -492,29 +406,19 @@ func genExprPrime(node *parser.ASTnode, leftTemp string) string {
 	return newTemp
 }
 
-func genTerm(node *parser.ASTnode) string {
-	// term -> factor term'
-	// child[0] = factor
-	// child[1] = term'
+func genTerm(node *ASTnode) string {
 	if len(node.Children) == 2 && node.Symbol == "term" {
 		leftTemp := genFactor(&node.Children[0])
 		return genTermPrime(&node.Children[1], leftTemp)
 	}
-
-	// fallback
 	if len(node.Children) == 1 {
 		return genTerm(&node.Children[0])
 	}
 	return ""
 }
 
-func genTermPrime(node *parser.ASTnode, leftTemp string) string {
-	// term' -> * factor term'
-	//        | / factor term'
-	//        | % factor term'
-	//        | ε
-
-	// if epsilon
+// Generate multiplication, division, and modulus instructions
+func genTermPrime(node *ASTnode, leftTemp string) string {
 	if len(node.Children) == 0 {
 		return leftTemp
 	}
@@ -539,12 +443,13 @@ func genTermPrime(node *parser.ASTnode, leftTemp string) string {
 	return newTemp
 }
 
-func genFactor(node *parser.ASTnode) string {
-
+// Generates instructions for factors and returns the resulting variable
+func genFactor(node *ASTnode) string {
+	// Check for function calls
 	if isCall, idN, exprSeqN := detectCall(node); isCall {
 		return genFunctionCall(*idN, exprSeqN)
 	}
-	// If factor -> INTEGER
+	// Generate instruction to store integer literals in a temp
 	if len(node.Children) == 1 && node.Children[0].Symbol == "INTEGER" {
 		val := node.Children[0].Lexeme
 		tmp := MakeTemp()
@@ -552,7 +457,7 @@ func genFactor(node *parser.ASTnode) string {
 		return tmp
 	}
 
-	// If factor -> DOUBLE
+	// Generate instruction to store double literals in a temp
 	if len(node.Children) == 1 && node.Children[0].Symbol == "DOUBLE" {
 		val := node.Children[0].Lexeme
 		tmp := MakeTemp()
@@ -560,62 +465,50 @@ func genFactor(node *parser.ASTnode) string {
 		return tmp
 	}
 
-	// If factor -> IDENTIFIER (variable)
 	if node.Children[0].Symbol == "id" {
 		return node.Children[0].Children[0].Lexeme
 	}
-	// If factor -> ( expr )
-	// child[0] = "("
-	// child[1] = expr
-	// child[2] = ")"
+
+	// handle ( expr )
 	if len(node.Children) == 3 && node.Children[0].Lexeme == "(" {
 		return genExpr(&node.Children[1])
 	}
 
-	// If factor -> function call or "id factor'", handle that
-	// ...
-
-	// If your grammar nest is deeper, keep drilling down
-	// or fallback
 	if len(node.Children) == 1 {
 		return genFactor(&node.Children[0])
 	}
-
 	return ""
 }
 
-// returns (isCall, idNode, exprSeqNode)
-func detectCall(factor *parser.ASTnode) (bool, *parser.ASTnode, *parser.ASTnode) {
+// Detects if a factor is a function call
+func detectCall(factor *ASTnode) (bool, *ASTnode, *ASTnode) {
 	if factor == nil || factor.Symbol != "factor" || len(factor.Children) < 2 {
 		return false, nil, nil
 	}
-	idNode := &factor.Children[0]       // id
-	factorPrime := &factor.Children[1]  // factor'
-	if len(factorPrime.Children) > 0 && // must have "("
-		factorPrime.Children[0].Lexeme == "(" {
-		// exprseq might be empty, but grammar still gives the node
-		exprSeq := &factorPrime.Children[1] // exprseq
+	idNode := &factor.Children[0]
+	factorPrime := &factor.Children[1]
+	if len(factorPrime.Children) > 0 && factorPrime.Children[0].Lexeme == "(" {
+		exprSeq := &factorPrime.Children[1]
 		return true, idNode, exprSeq
 	}
 	return false, nil, nil
 }
 
-// genFunctionCall handles calls like gcd( exprseq )
-func genFunctionCall(idNode parser.ASTnode, exprSeqNode *parser.ASTnode) string {
-	funcName := idNode.Children[0].Lexeme // the actual IDENTIFIER from id->identifier
-	// Evaluate each arg in exprseq
+// Creates instructions for function calls
+func genFunctionCall(idNode ASTnode, exprSeqNode *ASTnode) string {
+	funcName := idNode.Children[0].Lexeme
 	argTemps := collectArgs(exprSeqNode)
 
-	// In many 3AC forms, we might do "PARAM" instructions or "push" instructions:
+	// Push the arguments before the call
 	for _, arg := range argTemps {
 		Emit("PUSH", arg, "", "")
 	}
 
-	// Then call the function
+	// Generate branch link instruction for the function call
 	returnTemp := MakeTemp()
-	Emit("BL", funcName, returnTemp, "") // BL = branch and link (call)
+	Emit("BL", funcName, returnTemp, "")
 
-	// Pop the arguments (depending on your calling convention)
+	// Pop the arguments after the call
 	for i := len(argTemps) - 1; i >= 0; i-- {
 		arg := argTemps[i]
 		Emit("POP", arg, "", "")
@@ -624,64 +517,33 @@ func genFunctionCall(idNode parser.ASTnode, exprSeqNode *parser.ASTnode) string 
 	return returnTemp
 }
 
-// collectArgs walks exprseq to produce each argument
-func collectArgs(exprSeqNode *parser.ASTnode) []string {
-	// exprseq -> expr exprseq' or empty
-	// exprseq' -> , exprseq or empty
+// Returns the arguments from function calls
+func collectArgs(exprSeqNode *ASTnode) []string {
 	var result []string
 
-	var walk func(*parser.ASTnode)
-	walk = func(n *parser.ASTnode) {
+	var walk func(*ASTnode)
+	walk = func(n *ASTnode) {
 		if n.Symbol == "exprseq" {
 			if len(n.Children) > 0 {
-				// first child is an expr
 				exprTemp := genExpr(&n.Children[0])
 				result = append(result, exprTemp)
 			}
 			if len(n.Children) > 1 {
-				// second child is exprseq'
+				// recurse into exprseq'
 				walk(&n.Children[1])
 			}
 		} else if n.Symbol == "exprseq'" {
 			if len(n.Children) > 1 {
-				// child[1] is next exprseq
+				// Recurse into next exprseq
 				walk(&n.Children[1])
 			}
 		}
 	}
-
 	walk(exprSeqNode)
 	return result
 }
 
-// // Helper to get the name of a var node, adjusting if it's array-like
-// func getVarName(varNode *parser.ASTnode) string {
-// 	// var -> id var'
-// 	// If var' is empty, it's just the simple id
-// 	idNode := varNode.Children[0]
-// 	baseName := idNode.Children[0].Lexeme // IDENTIFIER text
-
-//		// If var' is [ expr ], we have an array element
-//		if len(varNode.Children) > 1 {
-//			varPrime := varNode.Children[1]
-//			if len(varPrime.Children) > 0 && varPrime.Children[0].Symbol == "[" {
-//				// array indexing
-//				idx := genExpr(&varPrime.Children[1])
-//				// For simplicity in 3TAC, we might do a separate temp = baseName[idx]
-//				t := MakeTemp()
-//				Emit("LOAD_ARR", baseName, idx, t)
-//				// We could return t as the “location”, or you might do something else
-//				return t
-//			}
-//		}
-//		return baseName
-//	}
-//
-// TODO: Those bits somehow
-func getVarName(varNode *parser.ASTnode) string {
-	// If var -> id var'
-	// child[0] is `id`
+func getVarName(varNode *ASTnode) string {
 	idNode := varNode.Children[0]
-	// idNode.Children[0] is `IDENTIFIER`
 	return idNode.Children[0].Lexeme
 }

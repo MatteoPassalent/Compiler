@@ -202,7 +202,8 @@ func isTypeCompatible(type1 string, type2 string) bool {
 }
 
 /**
- * Builds the symbol tables for the AST
+ * Builds the symbol tables for the AST, prints tables to file
+ * Logs errors to file and continues in recovery
  * Checks for:
  * 	- Redeclarations errors
  * 	- Undeclared variable reference errors
@@ -320,7 +321,6 @@ func BuildSymbolTables(node *ASTnode) {
 	if node.Symbol == "IDENTIFIER" {
 		if inDeclContext {
 			addSymbol(currentType, node.Symbol, node.Lexeme, nil, node.Line)
-			fmt.Printf("Declared %s as %s\n", node.Lexeme, currentType)
 		} else {
 			// Check if variable is declared
 			retrieveIdentifier(node.Lexeme)

@@ -80,7 +80,6 @@ func parse(nonTerminal string) ASTnode {
 	return node
 }
 
-// TODO: error handling
 func writeSyntaxError(err string) {
 	errorMessage := fmt.Sprintf("%s at line %d column %d", err, lexer.LineNumber, lexer.ColumnNumber)
 	fmt.Println(errorMessage)
@@ -91,7 +90,7 @@ func CloseParserFiles() {
 	defer syntaxErrorFile.Close()
 }
 
-// VisualizeAST writes a text-based representation of the AST to a file
+// Writes a text-based representation of the AST to a file
 func VisualizeAST(root *ASTnode, filePath string) {
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -102,22 +101,19 @@ func VisualizeAST(root *ASTnode, filePath string) {
 	visualizeNode(root, "", true, file)
 }
 
-// visualizeNode is a recursive helper function for VisualizeAST
+// Recursive helper function for VisualizeAST
 func visualizeNode(node *ASTnode, prefix string, isLast bool, file *os.File) {
 	if node == nil {
 		return
 	}
 
-	// Create the tree-like structure
 	marker := "└── "
 	if !isLast {
 		marker = "├── "
 	}
 
-	// Print the current node with appropriate formatting
 	nodeInfo := fmt.Sprintf("%s%s%s", prefix, marker, node.Symbol)
 
-	// Add additional node information
 	details := []string{}
 	if node.Lexeme != "" {
 		details = append(details, fmt.Sprintf("lexeme=%s", node.Lexeme))
@@ -132,7 +128,6 @@ func visualizeNode(node *ASTnode, prefix string, isLast bool, file *os.File) {
 
 	fmt.Fprintln(file, nodeInfo)
 
-	// Calculate the prefix for child nodes
 	childPrefix := prefix
 	if isLast {
 		childPrefix += "    "
@@ -140,7 +135,6 @@ func visualizeNode(node *ASTnode, prefix string, isLast bool, file *os.File) {
 		childPrefix += "│   "
 	}
 
-	// Recursively visualize children
 	for i, child := range node.Children {
 		isLastChild := i == len(node.Children)-1
 		visualizeNode(&child, childPrefix, isLastChild, file)
