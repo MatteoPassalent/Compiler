@@ -1,4 +1,4 @@
-def int function(double a, double b)
+^ def 123 int function(double a, double b)
     int d;
     while (a <> 4) do
         a = a + b
@@ -8,5 +8,5 @@ fed;
 double c;
 c = function(1.1, 2.2);
 if (c >= 4) then
-    print e;
+    print c;
 fi;.

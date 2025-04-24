@@ -246,9 +246,6 @@ func GetNextToken() Token {
 			token := Token{}
 			token.init("ERROR", tokenVal, LineNumber)
 			writeError(token)
-			if !IsPanicMode {
-				ErrorRecovery()
-			}
 			return token
 		} else if nextState == START { // Transistioned back to start state
 			if state == START { // (Start -> Start) Skip whitespace

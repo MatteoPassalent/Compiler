@@ -409,6 +409,16 @@ func BuildSymbolTables(node *ASTnode) {
 		}
 	}
 
+	// Type check for boolean comparisons
+	if node.Symbol == "bfactor" && len(node.Children) == 5 && node.Children[2].Symbol == "comp" {
+		leftType := getExprType(&node.Children[1])
+		rightType := getExprType(&node.Children[3])
+
+		if leftType != rightType || (leftType != "int" && leftType != "double") {
+			fmt.Fprintf(semanticErrorFile, "Type Error: Invalid comparison between '%s' and '%s'\n", leftType, rightType)
+		}
+	}
+
 	// Recurse AST
 	for i := range node.Children {
 		BuildSymbolTables(&node.Children[i])

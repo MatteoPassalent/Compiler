@@ -37,12 +37,20 @@ func parse(nonTerminal string) ASTnode {
 		return ASTnode{}
 	}
 	rule := ll1[nonTerminalIndex][currentTokenIndex]
-
 	if rule == "" {
 		writeSyntaxError("Error: Unexpected " + currentToken.Lexeme) // Syntax error
-		return ASTnode{}
+		currentToken = getNextValidToken()
+		currentTokenIndex, tokenExists = terminalMap[currentToken.Symbol]
+		if !tokenExists {
+			writeSyntaxError("Error: Invalid terminal " + currentToken.Lexeme) // Issue with LL1 or lexical
+			return ASTnode{}
+		}
+		rule = ll1[nonTerminalIndex][currentTokenIndex]
+		if rule == "" {
+			writeSyntaxError("Error: Unexpected " + currentToken.Lexeme) // Syntax error
+			return ASTnode{}
+		}
 	}
-
 	node := ASTnode{Symbol: nonTerminal}
 
 	rules := strings.Split(rule, " ")
@@ -57,11 +65,7 @@ func parse(nonTerminal string) ASTnode {
 		} else if symbol == currentToken.Symbol {
 			leafNode := ASTnode{Symbol: symbol, Lexeme: currentToken.Lexeme, Type: currentToken.Type, Line: currentToken.Line}
 			node.addChild(leafNode)
-			currentToken = lexer.GetNextToken()
-			if currentToken.Type == "ERROR" { // Invalid token, stop syntax parsing
-				fmt.Println("Error: Invalid token", currentToken.Lexeme)
-				return ASTnode{}
-			}
+			currentToken = getNextValidToken()
 			if currentToken.Type == "EOF" {
 				if nonTerminal == "program" && symbol == "." {
 					break // Valid end of program
@@ -80,9 +84,19 @@ func parse(nonTerminal string) ASTnode {
 	return node
 }
 
+func getNextValidToken() Token {
+	var validToken Token
+	for {
+		validToken = lexer.GetNextToken()
+		if validToken.Type != "ERROR" {
+			break
+		}
+	}
+	return validToken
+}
+
 func writeSyntaxError(err string) {
 	errorMessage := fmt.Sprintf("%s at line %d column %d", err, lexer.LineNumber, lexer.ColumnNumber)
-	fmt.Println(errorMessage)
 	fmt.Fprintln(syntaxErrorFile, errorMessage)
 }
 
@@ -147,7 +161,7 @@ func StartParser() ASTnode {
 	if err != nil {
 		log.Fatal("Error creating syntax_errors.txt")
 	}
-	currentToken = lexer.GetNextToken() // get first token
+	currentToken = getNextValidToken()
 	root := parse("program")
 	if root.Symbol == "" && !lexer.IsPanicMode {
 		lexer.ErrorRecovery() // Init error recovery for lexer
